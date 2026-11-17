@@ -1,0 +1,112 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login Admin - PPTQ Al-Ittihad</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f1f5f9;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+.login-box {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    width: 320px;
+    box-shadow: 0 4px 20px #0002;
+    text-align: center;
+}
+h2 { color: #14532d; }
+input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+}
+button {
+    width: 100%;
+    padding: 12px;
+    background: #166534;
+    color: white;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+}
+#pesan { color: #b91c1c; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="login-box">
+    <h2>PPTQ Al-Ittihad</h2>
+    <p>Login Administrator</p>
+
+    <form id="loginForm">
+        <input type="email" id="email"
+            placeholder="Email Admin" required>
+
+        <input type="password" id="password"
+            placeholder="Password" required>
+
+        <button type="submit">MASUK</button>
+    </form>
+
+    <p id="pesan"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://cpdkqqxvjfbcoucelhmr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
+
+const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const pesan = document.getElementById("pesan");
+
+    pesan.textContent = "Sedang memeriksa akun...";
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password
+    });
+
+    if (error) {
+        pesan.textContent = "Login gagal: " + error.message;
+        return;
+    }
+
+    const { data: profil, error: profilError } = await supabaseClient
+        .from("profil_pengguna")
+        .select("peran")
+        .eq("id", data.user.id)
+        .single();
+
+    if (profilError || profil.peran !== "admin") {
+        await supabaseClient.auth.signOut();
+        pesan.textContent = "Akun ini bukan administrator.";
+        return;
+    }
+
+    window.location.href = "dashboard-admin.html";
+});
+</script>
+
+</body>
+</html>
