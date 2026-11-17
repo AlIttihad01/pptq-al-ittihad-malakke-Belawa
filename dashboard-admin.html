@@ -5,7 +5,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard Admin PPTQ Al-Ittihad</title>
-
 <style>
 body {
     margin: 0;
@@ -20,7 +19,7 @@ header {
     text-align: center;
 }
 .container {
-    max-width: 1000px;
+    max-width: 1100px;
     margin: 25px auto;
     padding: 15px;
 }
@@ -43,16 +42,19 @@ button {
     background: #166534;
     color: white;
     border: 0;
-    padding: 11px 18px;
+    padding: 10px 15px;
     border-radius: 7px;
     cursor: pointer;
+    margin: 3px;
 }
 button:disabled {
     opacity: 0.6;
-    cursor: wait;
 }
-.logout {
+.logout, .hapus {
     background: #b91c1c;
+}
+.edit {
+    background: #1d4ed8;
 }
 table {
     width: 100%;
@@ -72,15 +74,10 @@ th {
 #pesan {
     margin-top: 12px;
 }
-.sukses {
-    color: #166534;
-}
-.gagal {
-    color: #b91c1c;
-}
+.sukses { color: #166534; }
+.gagal { color: #b91c1c; }
 </style>
 </head>
-
 <body>
 
 <header>
@@ -98,23 +95,18 @@ th {
 
     <div class="card">
         <h3>Tambah Data Santri</h3>
-        <p>Masukkan identitas santri PPTQ Al-Ittihad.</p>
 
         <form id="formSantri">
+            <label>NIS</label>
+            <input type="text" id="nis" required>
 
-            <label for="nis">Nomor Induk Santri (NIS)</label>
-            <input type="text" id="nis"
-                placeholder="Masukkan NIS" required>
+            <label>Nama Lengkap Santri</label>
+            <input type="text" id="nama" required>
 
-            <label for="nama">Nama Lengkap Santri</label>
-            <input type="text" id="nama"
-                placeholder="Masukkan nama lengkap" required>
+            <label>Kelas</label>
+            <input type="text" id="kelas">
 
-            <label for="kelas">Kelas</label>
-            <input type="text" id="kelas"
-                placeholder="Contoh: Tahfizh / Kelas 1">
-
-            <label for="statusSantri">Status Santri</label>
+            <label>Status</label>
             <select id="statusSantri">
                 <option value="aktif">Aktif</option>
                 <option value="nonaktif">Nonaktif</option>
@@ -123,7 +115,6 @@ th {
             <button type="submit" id="tombolSimpan">
                 SIMPAN DATA SANTRI
             </button>
-
         </form>
 
         <p id="pesan"></p>
@@ -131,8 +122,6 @@ th {
 
     <div class="card">
         <h3>Data Santri</h3>
-        <p>Daftar santri PPTQ Al-Ittihad Malakke.</p>
-
         <div class="table-wrap">
             <table>
                 <thead>
@@ -141,13 +130,11 @@ th {
                         <th>Nama Santri</th>
                         <th>Kelas</th>
                         <th>Status</th>
+                        <th>Aksi</th>
                     </tr>
                 </thead>
-
                 <tbody id="daftarSantri">
-                    <tr>
-                        <td colspan="4">Memuat data...</td>
-                    </tr>
+                    <tr><td colspan="5">Memuat data...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -156,7 +143,6 @@ th {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
 const SUPABASE_URL =
     "https://cpdkqqxvjfbcoucelhmr.supabase.co";
@@ -196,10 +182,16 @@ async function periksaAdmin() {
     tampilkanSantri();
 }
 
+function tampilkanPesan(teks, berhasil) {
+    const pesan = document.getElementById("pesan");
+    pesan.textContent = teks;
+    pesan.className = berhasil ? "sukses" : "gagal";
+}
+
 async function tampilkanSantri() {
     const { data, error } = await supabaseClient
         .from("santri")
-        .select("nis, nama_lengkap, kelas, status")
+        .select("id, nis, nama_lengkap, kelas, status")
         .order("id");
 
     const daftar = document.getElementById("daftarSantri");
@@ -207,41 +199,121 @@ async function tampilkanSantri() {
 
     if (error) {
         daftar.innerHTML =
-            '<tr><td colspan="4">Gagal memuat data santri.</td></tr>';
+            '<tr><td colspan="5">Gagal memuat data.</td></tr>';
         tampilkanPesan(error.message, false);
         return;
     }
 
     if (!data || data.length === 0) {
         daftar.innerHTML =
-            '<tr><td colspan="4">Belum ada data santri.</td></tr>';
+            '<tr><td colspan="5">Belum ada data santri.</td></tr>';
         return;
     }
 
     data.forEach(santri => {
         const baris = document.createElement("tr");
 
-        [
-            santri.nis,
-            santri.nama_lengkap,
-            santri.kelas,
-            santri.status
-        ].forEach(nilai => {
+        [santri.nis, santri.nama_lengkap,
+         santri.kelas, santri.status].forEach(nilai => {
             const sel = document.createElement("td");
             sel.textContent = nilai || "-";
             baris.appendChild(sel);
         });
 
+        const aksi = document.createElement("td");
+
+        const tombolEdit = document.createElement("button");
+        tombolEdit.textContent = "EDIT";
+        tombolEdit.className = "edit";
+        tombolEdit.onclick = () => editSantri(santri);
+
+        const tombolHapus = document.createElement("button");
+        tombolHapus.textContent = "HAPUS";
+        tombolHapus.className = "hapus";
+        tombolHapus.onclick = () => hapusSantri(santri);
+
+        aksi.appendChild(tombolEdit);
+        aksi.appendChild(tombolHapus);
+        baris.appendChild(aksi);
+
         daftar.appendChild(baris);
     });
 }
 
+async function editSantri(santri) {
+    const nis = prompt("Masukkan NIS:", santri.nis);
+    if (nis === null) return;
+
+    const nama = prompt("Masukkan nama lengkap:", santri.nama_lengkap);
+    if (nama === null) return;
+
+    const kelas = prompt("Masukkan kelas:", santri.kelas || "");
+    if (kelas === null) return;
+
+    const status = prompt(
+        "Masukkan status: aktif atau nonaktif",
+        santri.status || "aktif"
+    );
+    if (status === null) return;
+
+    if (!nis.trim() || !nama.trim()) {
+        tampilkanPesan("NIS dan nama wajib diisi.", false);
+        return;
+    }
+
+    if (!["aktif", "nonaktif"].includes(status.trim().toLowerCase())) {
+        tampilkanPesan("Status harus aktif atau nonaktif.", false);
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from("santri")
+        .update({
+            nis: nis.trim(),
+            nama_lengkap: nama.trim(),
+            kelas: kelas.trim() || null,
+            status: status.trim().toLowerCase()
+        })
+        .eq("id", santri.id);
+
+    if (error) {
+        tampilkanPesan("Gagal mengedit: " + error.message, false);
+        return;
+    }
+
+    tampilkanPesan("Data santri berhasil diperbarui.", true);
+    tampilkanSantri();
+}
+
+async function hapusSantri(santri) {
+    const yakin = confirm(
+        "Yakin ingin menghapus data santri " +
+        santri.nama_lengkap + "?"
+    );
+
+    if (!yakin) return;
+
+    const { error } = await supabaseClient
+        .from("santri")
+        .delete()
+        .eq("id", santri.id);
+
+    if (error) {
+        tampilkanPesan("Gagal menghapus: " + error.message, false);
+        return;
+    }
+
+    tampilkanPesan("Data santri berhasil dihapus.", true);
+    tampilkanSantri();
+}
+
 document.getElementById("formSantri")
 .addEventListener("submit", async function(e) {
-
     e.preventDefault();
 
     const tombol = document.getElementById("tombolSimpan");
+    tombol.disabled = true;
+    tombol.textContent = "MENYIMPAN...";
 
     const dataSantri = {
         nis: document.getElementById("nis").value.trim(),
@@ -249,14 +321,6 @@ document.getElementById("formSantri")
         kelas: document.getElementById("kelas").value.trim() || null,
         status: document.getElementById("statusSantri").value
     };
-
-    if (!dataSantri.nis || !dataSantri.nama_lengkap) {
-        tampilkanPesan("NIS dan nama santri wajib diisi.", false);
-        return;
-    }
-
-    tombol.disabled = true;
-    tombol.textContent = "MENYIMPAN...";
 
     const { error } = await supabaseClient
         .from("santri")
@@ -266,25 +330,14 @@ document.getElementById("formSantri")
     tombol.textContent = "SIMPAN DATA SANTRI";
 
     if (error) {
-        tampilkanPesan(
-            "Gagal menyimpan data: " + error.message,
-            false
-        );
+        tampilkanPesan("Gagal menyimpan: " + error.message, false);
         return;
     }
 
-    tampilkanPesan("Alhamdulillah! Data santri berhasil disimpan.", true);
-
-    document.getElementById("formSantri").reset();
-
+    this.reset();
+    tampilkanPesan("Data santri berhasil disimpan.", true);
     tampilkanSantri();
 });
-
-function tampilkanPesan(teks, berhasil) {
-    const pesan = document.getElementById("pesan");
-    pesan.textContent = teks;
-    pesan.className = berhasil ? "sukses" : "gagal";
-}
 
 async function keluar() {
     await supabaseClient.auth.signOut();
