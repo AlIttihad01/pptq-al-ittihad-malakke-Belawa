@@ -1,0 +1,190 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Admin PPTQ Al-Ittihad</title>
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+}
+header {
+    background: #14532d;
+    color: white;
+    padding: 22px;
+    text-align: center;
+}
+.container {
+    max-width: 1000px;
+    margin: 25px auto;
+    padding: 15px;
+}
+.card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px #0001;
+}
+button {
+    background: #166534;
+    color: white;
+    border: 0;
+    padding: 11px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+.logout {
+    background: #b91c1c;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+}
+th {
+    background: #dcfce7;
+}
+.table-wrap {
+    overflow-x: auto;
+}
+#pesan {
+    color: #b91c1c;
+}
+</style>
+</head>
+<body>
+
+<header>
+    <h2>DASHBOARD ADMIN</h2>
+    <p>PPTQ AL-ITTIHAD MALAKKE BELAWA</p>
+</header>
+
+<div class="container">
+
+    <div class="card">
+        <h3>Selamat Datang, Administrator</h3>
+        <p id="status">Memeriksa akun...</p>
+        <button class="logout" onclick="keluar()">Keluar</button>
+    </div>
+
+    <div class="card">
+        <h3>Data Santri</h3>
+        <p>Daftar santri PPTQ Al-Ittihad Malakke</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>NIS</th>
+                        <th>Nama Santri</th>
+                        <th>Kelas</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="daftarSantri">
+                    <tr>
+                        <td colspan="4">Memuat data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p id="pesan"></p>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://cpdkqqxvjfbcoucelhmr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
+
+const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+async function periksaAdmin() {
+    const { data: sessionData } =
+        await supabaseClient.auth.getSession();
+
+    if (!sessionData.session) {
+        window.location.href = "admin.html";
+        return;
+    }
+
+    const { data: profil, error } = await supabaseClient
+        .from("profil_pengguna")
+        .select("nama, peran")
+        .eq("id", sessionData.session.user.id)
+        .single();
+
+    if (error || profil.peran !== "admin") {
+        await supabaseClient.auth.signOut();
+        window.location.href = "admin.html";
+        return;
+    }
+
+    document.getElementById("status").textContent =
+        "Login sebagai: " + profil.nama;
+
+    tampilkanSantri();
+}
+
+async function tampilkanSantri() {
+    const { data, error } = await supabaseClient
+        .from("santri")
+        .select("nis, nama_lengkap, kelas, status")
+        .order("id");
+
+    const daftar = document.getElementById("daftarSantri");
+
+    if (error) {
+        daftar.innerHTML =
+            '<tr><td colspan="4">Gagal memuat data santri</td></tr>';
+        document.getElementById("pesan").textContent = error.message;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        daftar.innerHTML =
+            '<tr><td colspan="4">Belum ada data santri.</td></tr>';
+        return;
+    }
+
+    daftar.innerHTML = "";
+
+    data.forEach(santri => {
+        const baris = document.createElement("tr");
+
+        [santri.nis, santri.nama_lengkap,
+         santri.kelas, santri.status].forEach(nilai => {
+            const sel = document.createElement("td");
+            sel.textContent = nilai || "-";
+            baris.appendChild(sel);
+        });
+
+        daftar.appendChild(baris);
+    });
+}
+
+async function keluar() {
+    await supabaseClient.auth.signOut();
+    window.location.href = "admin.html";
+}
+
+periksaAdmin();
+</script>
+
+</body>
+</html>
