@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard Admin PPTQ Al-Ittihad</title>
+
 <style>
 body {
     margin: 0;
@@ -30,6 +31,14 @@ header {
     border-radius: 12px;
     box-shadow: 0 2px 8px #0001;
 }
+input, select {
+    width: 100%;
+    padding: 12px;
+    margin: 7px 0 15px;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+}
 button {
     background: #166534;
     color: white;
@@ -37,6 +46,10 @@ button {
     padding: 11px 18px;
     border-radius: 7px;
     cursor: pointer;
+}
+button:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 .logout {
     background: #b91c1c;
@@ -57,10 +70,17 @@ th {
     overflow-x: auto;
 }
 #pesan {
+    margin-top: 12px;
+}
+.sukses {
+    color: #166534;
+}
+.gagal {
     color: #b91c1c;
 }
 </style>
 </head>
+
 <body>
 
 <header>
@@ -77,8 +97,41 @@ th {
     </div>
 
     <div class="card">
+        <h3>Tambah Data Santri</h3>
+        <p>Masukkan identitas santri PPTQ Al-Ittihad.</p>
+
+        <form id="formSantri">
+
+            <label for="nis">Nomor Induk Santri (NIS)</label>
+            <input type="text" id="nis"
+                placeholder="Masukkan NIS" required>
+
+            <label for="nama">Nama Lengkap Santri</label>
+            <input type="text" id="nama"
+                placeholder="Masukkan nama lengkap" required>
+
+            <label for="kelas">Kelas</label>
+            <input type="text" id="kelas"
+                placeholder="Contoh: Tahfizh / Kelas 1">
+
+            <label for="statusSantri">Status Santri</label>
+            <select id="statusSantri">
+                <option value="aktif">Aktif</option>
+                <option value="nonaktif">Nonaktif</option>
+            </select>
+
+            <button type="submit" id="tombolSimpan">
+                SIMPAN DATA SANTRI
+            </button>
+
+        </form>
+
+        <p id="pesan"></p>
+    </div>
+
+    <div class="card">
         <h3>Data Santri</h3>
-        <p>Daftar santri PPTQ Al-Ittihad Malakke</p>
+        <p>Daftar santri PPTQ Al-Ittihad Malakke.</p>
 
         <div class="table-wrap">
             <table>
@@ -90,6 +143,7 @@ th {
                         <th>Status</th>
                     </tr>
                 </thead>
+
                 <tbody id="daftarSantri">
                     <tr>
                         <td colspan="4">Memuat data...</td>
@@ -97,8 +151,6 @@ th {
                 </tbody>
             </table>
         </div>
-
-        <p id="pesan"></p>
     </div>
 
 </div>
@@ -106,8 +158,11 @@ th {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-const SUPABASE_URL = "https://cpdkqqxvjfbcoucelhmr.supabase.co";
-const SUPABASE_KEY = "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
+const SUPABASE_URL =
+    "https://cpdkqqxvjfbcoucelhmr.supabase.co";
+
+const SUPABASE_KEY =
+    "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
 
 const supabaseClient = window.supabase.createClient(
     SUPABASE_URL,
@@ -129,7 +184,7 @@ async function periksaAdmin() {
         .eq("id", sessionData.session.user.id)
         .single();
 
-    if (error || profil.peran !== "admin") {
+    if (error || !profil || profil.peran !== "admin") {
         await supabaseClient.auth.signOut();
         window.location.href = "admin.html";
         return;
@@ -148,11 +203,12 @@ async function tampilkanSantri() {
         .order("id");
 
     const daftar = document.getElementById("daftarSantri");
+    daftar.innerHTML = "";
 
     if (error) {
         daftar.innerHTML =
-            '<tr><td colspan="4">Gagal memuat data santri</td></tr>';
-        document.getElementById("pesan").textContent = error.message;
+            '<tr><td colspan="4">Gagal memuat data santri.</td></tr>';
+        tampilkanPesan(error.message, false);
         return;
     }
 
@@ -162,13 +218,15 @@ async function tampilkanSantri() {
         return;
     }
 
-    daftar.innerHTML = "";
-
     data.forEach(santri => {
         const baris = document.createElement("tr");
 
-        [santri.nis, santri.nama_lengkap,
-         santri.kelas, santri.status].forEach(nilai => {
+        [
+            santri.nis,
+            santri.nama_lengkap,
+            santri.kelas,
+            santri.status
+        ].forEach(nilai => {
             const sel = document.createElement("td");
             sel.textContent = nilai || "-";
             baris.appendChild(sel);
@@ -176,6 +234,56 @@ async function tampilkanSantri() {
 
         daftar.appendChild(baris);
     });
+}
+
+document.getElementById("formSantri")
+.addEventListener("submit", async function(e) {
+
+    e.preventDefault();
+
+    const tombol = document.getElementById("tombolSimpan");
+
+    const dataSantri = {
+        nis: document.getElementById("nis").value.trim(),
+        nama_lengkap: document.getElementById("nama").value.trim(),
+        kelas: document.getElementById("kelas").value.trim() || null,
+        status: document.getElementById("statusSantri").value
+    };
+
+    if (!dataSantri.nis || !dataSantri.nama_lengkap) {
+        tampilkanPesan("NIS dan nama santri wajib diisi.", false);
+        return;
+    }
+
+    tombol.disabled = true;
+    tombol.textContent = "MENYIMPAN...";
+
+    const { error } = await supabaseClient
+        .from("santri")
+        .insert(dataSantri);
+
+    tombol.disabled = false;
+    tombol.textContent = "SIMPAN DATA SANTRI";
+
+    if (error) {
+        tampilkanPesan(
+            "Gagal menyimpan data: " + error.message,
+            false
+        );
+        return;
+    }
+
+    tampilkanPesan("Alhamdulillah! Data santri berhasil disimpan.", true);
+
+    document.getElementById("formSantri").reset();
+
+    tampilkanSantri();
+});
+
+function tampilkanPesan(teks, berhasil) {
+    const pesan = document.getElementById("pesan");
+    pesan.textContent = teks;
+    pesan.className = berhasil ? "sukses" : "gagal";
 }
 
 async function keluar() {
