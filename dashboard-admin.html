@@ -215,6 +215,9 @@ th {
 </button>
     <button type="button" onclick="cetakLaporanBulanan()">
     CETAK LAPORAN BULANAN
+</button>
+    <button type="button" onclick="unduhLaporanExcel()">
+    UNDUH LAPORAN EXCEL
 </button></div>
 
 </div>
@@ -1062,6 +1065,117 @@ async function cetakLaporanBulanan() {
     jendela.document.close();
 }
 
+ 
+// UNDUH LAPORAN TABUNGAN EXCEL
+async function unduhLaporanExcel() {
+    alert("Sedang menyiapkan laporan Excel...");
+
+    const { data: santri, error: errorSantri } =
+        await supabaseClient
+        .from("santri")
+        .select("id, nis, nama_lengkap, kelas")
+        .order("nama_lengkap");
+
+    if (errorSantri) {
+        alert("Gagal memuat santri: " + errorSantri.message);
+        return;
+    }
+
+    const { data: transaksi, error } =
+        await supabaseClient
+        .from("transaksi_tabungan")
+        .select("santri_id, jenis, jumlah");
+
+    if (error) {
+        alert("Gagal memuat transaksi: " + error.message);
+        return;
+    }
+
+    const rupiahAngka = nilai =>
+        Number(nilai || 0);
+
+    const amankanTeks = nilai => {
+        let teks = String(nilai ?? "");
+        if (/^[=+\-@]/.test(teks)) teks = "'" + teks;
+        return '"' + teks.replace(/"/g, '""') + '"';
+    };
+
+    const baris = [
+        [
+            "No.",
+            "NIS",
+            "Nama Santri",
+            "Kelas",
+            "Total Setoran",
+            "Total Penarikan",
+            "Saldo Akhir"
+        ]
+    ];
+
+    let totalSetoran = 0;
+    let totalPenarikan = 0;
+
+    (santri || []).forEach((s, i) => {
+        const daftar = (transaksi || []).filter(
+            t => Number(t.santri_id) === Number(s.id)
+        );
+
+        const setoran = daftar
+            .filter(t => t.jenis === "setoran")
+            .reduce((a, t) => a + rupiahAngka(t.jumlah), 0);
+
+        const penarikan = daftar
+            .filter(t => t.jenis === "penarikan")
+            .reduce((a, t) => a + rupiahAngka(t.jumlah), 0);
+
+        totalSetoran += setoran;
+        totalPenarikan += penarikan;
+
+        baris.push([
+            i + 1,
+            amankanTeks(s.nis),
+            amankanTeks(s.nama_lengkap),
+            amankanTeks(s.kelas || "-"),
+            setoran,
+            penarikan,
+            setoran - penarikan
+        ]);
+    });
+
+    baris.push([]);
+    baris.push([
+        "",
+        "",
+        "",
+        "TOTAL SELURUH SANTRI",
+        totalSetoran,
+        totalPenarikan,
+        totalSetoran - totalPenarikan
+    ]);
+
+    const isiCSV = "\uFEFF" + baris
+        .map(row => row.join(";"))
+        .join("\r\n");
+
+    const file = new Blob([isiCSV], {
+        type: "text/csv;charset=utf-8;"
+    });
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "Laporan_Tabungan_Seluruh_Santri.csv";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+
+    alert("Laporan berhasil diunduh. Silakan buka dengan Microsoft Excel.");
+}
+  
     // MEMUAT PILIHAN SANTRI SETELAH LOGIN ADMIN
 periksaAdmin();
 </script>
