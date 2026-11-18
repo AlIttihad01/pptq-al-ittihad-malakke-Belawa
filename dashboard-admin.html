@@ -139,6 +139,75 @@ th {
             </table>
         </div>
     </div>
+</html>
+ 
+    <div class="card">
+        <h3>💰 TABUNGAN SANTRI</h3>
+        <p>Pencatatan setoran dan penarikan tabungan.</p>
+
+        <form id="formTabungan">
+
+            <label>Pilih Nama Santri</label>
+            <select id="pilihSantri" required>
+                <option value="">-- Pilih Santri --</option>
+            </select>
+
+            <label>Jenis Transaksi</label>
+            <select id="jenisTransaksi" required>
+                <option value="setoran">Setoran Tabungan</option>
+                <option value="penarikan">Penarikan Tabungan</option>
+            </select>
+
+            <label>Jumlah Uang (Rupiah)</label>
+            <input
+                type="number"
+                id="jumlahTabungan"
+                min="1"
+                step="1"
+                placeholder="Contoh: 50000"
+                required
+            >
+
+            <label>Keterangan</label>
+            <input
+                type="text"
+                id="keteranganTabungan"
+                placeholder="Contoh: Setoran mingguan"
+            >
+
+            <button type="submit" id="tombolTransaksi">
+                SIMPAN TRANSAKSI
+            </button>
+
+        </form>
+
+        <p id="pesanTabungan"></p>
+
+        <hr>
+
+        <h3>Saldo Tabungan</h3>
+        <h2 id="saldoSantri">Rp 0</h2>
+
+        <h3>Riwayat Transaksi</h3>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Jenis</th>
+                        <th>Jumlah</th>
+                        <th>Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody id="riwayatTabungan">
+                    <tr>
+                        <td colspan="4">Pilih santri untuk melihat riwayat.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
 </div>
 
@@ -180,7 +249,7 @@ async function periksaAdmin() {
         "Login sebagai: " + profil.nama;
 
     tampilkanSantri();
-}
+muatPilihanSantri();
 
 function tampilkanPesan(teks, berhasil) {
     const pesan = document.getElementById("pesan");
@@ -344,8 +413,177 @@ async function keluar() {
     window.location.href = "admin.html";
 }
 
+
+// MEMUAT PILIHAN SANTRI
+async function muatPilihanSantri() {
+    const { data, error } = await supabaseClient
+        .from("santri")
+        .select("id, nis, nama_lengkap")
+        .order("nama_lengkap");
+
+    const pilihan = document.getElementById("pilihSantri");
+
+    if (error) {
+        document.getElementById("pesanTabungan").textContent =
+            "Gagal memuat santri: " + error.message;
+        return;
+    }
+
+    pilihan.innerHTML = '<option value="">-- Pilih Santri --</option>';
+
+    data.forEach(s => {
+        const opsi = document.createElement("option");
+        opsi.value = s.id;
+        opsi.textContent = s.nama_lengkap + " (NIS: " + s.nis + ")";
+        pilihan.appendChild(opsi);
+    });
+}
+
+// FORMAT RUPIAH
+function formatRupiah(nilai) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0
+    }).format(Number(nilai) || 0);
+}
+
+// MEMUAT SALDO DAN RIWAYAT
+async function muatTabungan(santriId) {
+    if (!santriId) return;
+
+    const saldo = document.getElementById("saldoSantri");
+    const riwayat = document.getElementById("riwayatTabungan");
+
+    saldo.textContent = "Memuat saldo...";
+    riwayat.innerHTML =
+        '<tr><td colspan="4">Memuat riwayat...</td></tr>';
+
+    const { data: nilaiSaldo, error: errorSaldo } =
+        await supabaseClient.rpc("hitung_saldo_santri", {
+            p_santri_id: Number(santriId)
+        });
+
+    if (errorSaldo) {
+        saldo.textContent = "Gagal memuat saldo";
+        document.getElementById("pesanTabungan").textContent =
+            errorSaldo.message;
+        return;
+    }
+
+    saldo.textContent = formatRupiah(nilaiSaldo);
+
+    const { data, error } = await supabaseClient
+        .from("transaksi_tabungan")
+        .select("tanggal, jenis, jumlah, keterangan")
+        .eq("santri_id", Number(santriId))
+        .order("tanggal", { ascending: false });
+
+    if (error) {
+        riwayat.innerHTML =
+            '<tr><td colspan="4">Gagal memuat riwayat.</td></tr>';
+        document.getElementById("pesanTabungan").textContent =
+            error.message;
+        return;
+    }
+
+    riwayat.innerHTML = "";
+
+    if (!data || data.length === 0) {
+        riwayat.innerHTML =
+            '<tr><td colspan="4">Belum ada transaksi.</td></tr>';
+        return;
+    }
+
+    data.forEach(t => {
+        const baris = document.createElement("tr");
+
+        const tanggal = new Date(t.tanggal).toLocaleString("id-ID");
+
+        [tanggal, t.jenis, formatRupiah(t.jumlah),
+         t.keterangan || "-"].forEach(nilai => {
+            const sel = document.createElement("td");
+            sel.textContent = nilai;
+            baris.appendChild(sel);
+        });
+
+        riwayat.appendChild(baris);
+    });
+}
+
+// SAAT SANTRI DIPILIH
+document.getElementById("pilihSantri")
+.addEventListener("change", function() {
+    muatTabungan(this.value);
+});
+
+// MENYIMPAN SETORAN DAN PENARIKAN
+document.getElementById("formTabungan")
+.addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const santriId =
+        document.getElementById("pilihSantri").value;
+
+    const jenis =
+        document.getElementById("jenisTransaksi").value;
+
+    const jumlah =
+        Number(document.getElementById("jumlahTabungan").value);
+
+    const keterangan =
+        document.getElementById("keteranganTabungan").value.trim();
+
+    const tombol =
+        document.getElementById("tombolTransaksi");
+
+    const pesan =
+        document.getElementById("pesanTabungan");
+
+    if (!santriId || !Number.isSafeInteger(Number(santriId))) {
+        pesan.textContent = "Silakan pilih santri.";
+        return;
+    }
+
+    if (!Number.isSafeInteger(jumlah) || jumlah <= 0) {
+        pesan.textContent = "Jumlah harus berupa Rupiah positif tanpa desimal.";
+        return;
+    }
+
+    tombol.disabled = true;
+    tombol.textContent = "MENYIMPAN...";
+    pesan.textContent = "Sedang menyimpan transaksi...";
+
+    const { error } = await supabaseClient.rpc(
+        "catat_transaksi_tabungan",
+        {
+            p_santri_id: Number(santriId),
+            p_jenis: jenis,
+            p_jumlah: jumlah,
+            p_keterangan: keterangan || null
+        }
+    );
+
+    tombol.disabled = false;
+    tombol.textContent = "SIMPAN TRANSAKSI";
+
+    if (error) {
+        pesan.textContent = "Gagal menyimpan: " + error.message;
+        pesan.className = "gagal";
+        return;
+    }
+
+    pesan.textContent = "Alhamdulillah, transaksi berhasil disimpan.";
+    pesan.className = "sukses";
+
+    document.getElementById("jumlahTabungan").value = "";
+    document.getElementById("keteranganTabungan").value = "";
+
+    await muatTabungan(santriId);
+});
+
+// MEMUAT PILIHAN SANTRI SETELAH LOGIN ADMIN
 periksaAdmin();
 </script>
 
 </body>
-</html>
