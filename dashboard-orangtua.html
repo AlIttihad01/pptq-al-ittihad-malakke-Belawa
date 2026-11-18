@@ -1,0 +1,289 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Orang Tua - PPTQ Al-Ittihad</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+}
+header {
+    background: #14532d;
+    color: white;
+    padding: 22px;
+    text-align: center;
+}
+.container {
+    max-width: 1000px;
+    margin: 25px auto;
+    padding: 15px;
+}
+.card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px #0001;
+}
+button {
+    background: #b91c1c;
+    color: white;
+    border: 0;
+    padding: 11px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+}
+th {
+    background: #dcfce7;
+}
+.table-wrap {
+    overflow-x: auto;
+}
+.saldo {
+    color: #166534;
+    font-size: 25px;
+    font-weight: bold;
+}
+.pesan {
+    color: #b91c1c;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h2>DASHBOARD ORANG TUA</h2>
+    <p>PPTQ AL-ITTIHAD MALAKKE BELAWA</p>
+</header>
+
+<div class="container">
+
+    <div class="card">
+        <h3>Assalamu'alaikum</h3>
+        <p id="namaOrangTua">Memeriksa akun...</p>
+        <button onclick="keluar()">KELUAR</button>
+    </div>
+
+    <div id="daftarAnak">
+        <div class="card">Memuat data anak...</div>
+    </div>
+
+    <p id="pesan" class="pesan"></p>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL =
+"https://cpdkqqxvjfbcoucelhmr.supabase.co";
+
+const SUPABASE_KEY =
+"sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
+
+const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+function rupiah(nilai) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0
+    }).format(Number(nilai) || 0);
+}
+
+async function muatDashboard() {
+    const daftar = document.getElementById("daftarAnak");
+    const pesan = document.getElementById("pesan");
+
+    const { data: sessionData, error: sessionError } =
+        await supabaseClient.auth.getSession();
+
+    if (sessionError || !sessionData.session) {
+        window.location.href = "login-orangtua.html";
+        return;
+    }
+
+    const user = sessionData.session.user;
+
+    const { data: orangTua, error: errorOrangTua } =
+        await supabaseClient
+        .from("orang_tua")
+        .select("id, nama_orang_tua")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (errorOrangTua || !orangTua) {
+        daftar.textContent = "Profil orang tua belum ditemukan.";
+        return;
+    }
+
+    document.getElementById("namaOrangTua").textContent =
+        "Bapak/Ibu " + orangTua.nama_orang_tua;
+
+    const { data: relasi, error: errorRelasi } =
+        await supabaseClient
+        .from("orang_tua_santri")
+        .select("santri_id")
+        .eq("orang_tua_id", orangTua.id);
+
+    if (errorRelasi) {
+        daftar.textContent = "Gagal memuat hubungan data santri.";
+        pesan.textContent = errorRelasi.message;
+        return;
+    }
+
+    if (!relasi || relasi.length === 0) {
+        daftar.textContent = "Belum ada santri yang terhubung.";
+        return;
+    }
+
+    const ids = relasi.map(r => r.santri_id);
+
+    const { data: santri, error: errorSantri } =
+        await supabaseClient
+        .from("santri")
+        .select("id, nis, nama_lengkap, kelas")
+        .in("id", ids);
+
+    if (errorSantri) {
+        daftar.textContent = "Gagal memuat data anak.";
+        pesan.textContent = errorSantri.message;
+        return;
+    }
+
+    const { data: transaksi, error: errorTransaksi } =
+        await supabaseClient
+        .from("transaksi_tabungan")
+        .select("santri_id, tanggal, jenis, jumlah, keterangan")
+        .in("santri_id", ids)
+        .order("tanggal", { ascending: false });
+
+    if (errorTransaksi) {
+        daftar.textContent = "Gagal memuat riwayat tabungan.";
+        pesan.textContent = errorTransaksi.message;
+        return;
+    }
+
+    daftar.innerHTML = "";
+
+    santri.forEach(s => {
+        const riwayat = (transaksi || []).filter(
+            t => t.santri_id === s.id
+        );
+
+        const saldo = riwayat.reduce((total, t) => {
+            return total + (
+                t.jenis === "setoran"
+                ? Number(t.jumlah)
+                : -Number(t.jumlah)
+            );
+        }, 0);
+
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const judul = document.createElement("h3");
+        judul.textContent = s.nama_lengkap;
+        card.appendChild(judul);
+
+        const identitas = document.createElement("p");
+        identitas.textContent =
+            "NIS: " + s.nis + " | Kelas: " + (s.kelas || "-");
+        card.appendChild(identitas);
+
+        const label = document.createElement("h4");
+        label.textContent = "Saldo Tabungan";
+        card.appendChild(label);
+
+        const nilai = document.createElement("div");
+        nilai.className = "saldo";
+        nilai.textContent = rupiah(saldo);
+        card.appendChild(nilai);
+
+        const subjudul = document.createElement("h4");
+        subjudul.textContent = "Riwayat Transaksi";
+        card.appendChild(subjudul);
+
+        const pembungkus = document.createElement("div");
+        pembungkus.className = "table-wrap";
+
+        const tabel = document.createElement("table");
+        const kepala = document.createElement("thead");
+        const barisKepala = document.createElement("tr");
+
+        ["Tanggal", "Jenis", "Jumlah", "Keterangan"].forEach(teks => {
+            const th = document.createElement("th");
+            th.textContent = teks;
+            barisKepala.appendChild(th);
+        });
+
+        kepala.appendChild(barisKepala);
+        tabel.appendChild(kepala);
+
+        const badan = document.createElement("tbody");
+
+        if (riwayat.length === 0) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 4;
+            td.textContent = "Belum ada transaksi.";
+            tr.appendChild(td);
+            badan.appendChild(tr);
+        } else {
+            riwayat.forEach(t => {
+                const tr = document.createElement("tr");
+
+                const tanggal =
+                    new Date(t.tanggal).toLocaleDateString("id-ID");
+
+                [
+                    tanggal,
+                    t.jenis === "setoran" ? "Setoran" : "Penarikan",
+                    rupiah(t.jumlah),
+                    t.keterangan || "-"
+                ].forEach(teks => {
+                    const td = document.createElement("td");
+                    td.textContent = teks;
+                    tr.appendChild(td);
+                });
+
+                badan.appendChild(tr);
+            });
+        }
+
+        tabel.appendChild(badan);
+        pembungkus.appendChild(tabel);
+        card.appendChild(pembungkus);
+        daftar.appendChild(card);
+    });
+}
+
+async function keluar() {
+    await supabaseClient.auth.signOut();
+    window.location.href = "login-orangtua.html";
+}
+
+muatDashboard();
+</script>
+
+</body>
+</html>
