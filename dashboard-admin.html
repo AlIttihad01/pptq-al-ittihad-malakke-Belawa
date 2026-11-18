@@ -586,6 +586,159 @@ document.getElementById("formTabungan")
     await muatTabungan(santriId);
 });
 
+// CETAK LAPORAN TABUNGAN SANTRI
+async function cetakLaporanTabungan() {
+    const santriId = document.getElementById("pilihSantri").value;
+
+    if (!santriId) {
+        alert("Silakan pilih santri terlebih dahulu.");
+        return;
+    }
+
+    const jendela = window.open("", "_blank");
+
+    if (!jendela) {
+        alert("Izinkan pop-up pada browser untuk mencetak laporan.");
+        return;
+    }
+
+    jendela.document.write("<p>Menyiapkan laporan...</p>");
+
+    const { data: santri, error: errorSantri } =
+        await supabaseClient
+        .from("santri")
+        .select("nis, nama_lengkap, kelas")
+        .eq("id", Number(santriId))
+        .single();
+
+    if (errorSantri || !santri) {
+        jendela.close();
+        alert("Data santri gagal dimuat.");
+        return;
+    }
+
+    const { data: transaksi, error } =
+        await supabaseClient
+        .from("transaksi_tabungan")
+        .select("tanggal, jenis, jumlah, keterangan")
+        .eq("santri_id", Number(santriId))
+        .order("tanggal", { ascending: true });
+
+    if (error) {
+        jendela.close();
+        alert("Riwayat transaksi gagal dimuat: " + error.message);
+        return;
+    }
+
+    const saldo = (transaksi || []).reduce((total, t) => {
+        return total + (
+            t.jenis === "setoran"
+            ? Number(t.jumlah)
+            : -Number(t.jumlah)
+        );
+    }, 0);
+
+    const rupiah = nilai =>
+        new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            maximumFractionDigits: 0
+        }).format(nilai);
+
+    const baris = (transaksi || []).map((t, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td>${new Date(t.tanggal).toLocaleDateString("id-ID")}</td>
+            <td>${t.jenis === "setoran" ? "Setoran" : "Penarikan"}</td>
+            <td>${rupiah(Number(t.jumlah))}</td>
+            <td>${t.keterangan || "-"}</td>
+        </tr>
+    `).join("");
+
+    jendela.document.open();
+    jendela.document.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <title>Laporan Tabungan Santri</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 35px;
+                    color: #222;
+                }
+                h2, h3, p { text-align: center; }
+                .identitas { margin: 25px 0; }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }
+                th, td {
+                    border: 1px solid #555;
+                    padding: 9px;
+                    text-align: left;
+                }
+                th { background: #dcfce7; }
+                .saldo {
+                    text-align: right;
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-top: 20px;
+                }
+                .ttd {
+                    margin-top: 65px;
+                    text-align: right;
+                }
+                @media print {
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <h2>PPTQ AL-ITTIHAD MALAKKE</h2>
+            <p>LAPORAN TABUNGAN SANTRI</p>
+            <hr>
+
+            <div class="identitas">
+                <p style="text-align:left">
+                    Nama Santri: <b>${santri.nama_lengkap}</b><br>
+                    NIS: ${santri.nis}<br>
+                    Kelas: ${santri.kelas || "-"}
+                </p>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>Tanggal</th>
+                        <th>Jenis</th>
+                        <th>Jumlah</th>
+                        <th>Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${baris || '<tr><td colspan="5">Belum ada transaksi.</td></tr>'}
+                </tbody>
+            </table>
+
+            <p class="saldo">Saldo Akhir: ${rupiah(saldo)}</p>
+
+            <div class="ttd">
+                Belawa, ${new Date().toLocaleDateString("id-ID")}<br>
+                Administrator,<br><br><br><br>
+                <b>Pengelola Tabungan PPTQ Al-Ittihad</b>
+            </div>
+
+            <button onclick="window.print()">CETAK LAPORAN</button>
+        </body>
+        </html>
+    `);
+    jendela.document.close();
+}
+
 // MEMUAT PILIHAN SANTRI SETELAH LOGIN ADMIN
 periksaAdmin();
 </script>
