@@ -213,7 +213,9 @@ th {
         <button type="button" onclick="cetakLaporanSemuaSantri()">
     CETAK LAPORAN SELURUH SANTRI
 </button>
-    </div>
+    <button type="button" onclick="cetakLaporanBulanan()">
+    CETAK LAPORAN BULANAN
+</button></div>
 
 </div>
 
@@ -869,6 +871,188 @@ async function cetakLaporanSemuaSantri() {
             <p class="total">
                 Total Saldo Seluruh Santri: ${rupiah(totalSaldo)}
             </p>
+            <p>Belawa, ${new Date().toLocaleDateString("id-ID")}</p>
+            <p>Pengelola Tabungan PPTQ Al-Ittihad</p>
+            <button onclick="window.print()">CETAK LAPORAN</button>
+        </body>
+        </html>
+    `);
+    jendela.document.close();
+}
+
+   
+// CETAK LAPORAN TABUNGAN BULANAN
+async function cetakLaporanBulanan() {
+    const bulanInput = prompt("Masukkan bulan (1-12):");
+    if (bulanInput === null) return;
+
+    const bulan = Number(bulanInput);
+    if (!Number.isInteger(bulan) || bulan < 1 || bulan > 12) {
+        alert("Bulan harus diisi angka 1 sampai 12.");
+        return;
+    }
+
+    const tahunInput = prompt("Masukkan tahun, contoh: 2026:");
+    if (tahunInput === null) return;
+
+    const tahun = Number(tahunInput);
+    if (!Number.isInteger(tahun) || tahun < 2000 || tahun > 2100) {
+        alert("Tahun tidak valid.");
+        return;
+    }
+
+    const jendela = window.open("", "_blank");
+    if (!jendela) {
+        alert("Izinkan pop-up pada browser.");
+        return;
+    }
+
+    jendela.document.write("<p>Menyiapkan laporan bulanan...</p>");
+
+    const awal = new Date(tahun, bulan - 1, 1);
+    const akhir = new Date(tahun, bulan, 1);
+    const awalISO = awal.toISOString();
+    const akhirISO = akhir.toISOString();
+
+    const { data: santri, error: errorSantri } =
+        await supabaseClient
+        .from("santri")
+        .select("id, nis, nama_lengkap, kelas")
+        .order("nama_lengkap");
+
+    if (errorSantri) {
+        jendela.close();
+        alert("Gagal memuat santri: " + errorSantri.message);
+        return;
+    }
+
+    const { data: transaksi, error } =
+        await supabaseClient
+        .from("transaksi_tabungan")
+        .select("santri_id, jenis, jumlah, tanggal")
+        .lt("tanggal", akhirISO)
+        .order("tanggal");
+
+    if (error) {
+        jendela.close();
+        alert("Gagal memuat transaksi: " + error.message);
+        return;
+    }
+
+    const rupiah = nilai =>
+        new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            maximumFractionDigits: 0
+        }).format(nilai);
+
+    let totalSaldo = 0;
+    let totalSetoranBulan = 0;
+    let totalPenarikanBulan = 0;
+
+    const baris = (santri || []).map((s, i) => {
+        const daftar = (transaksi || []).filter(
+            t => Number(t.santri_id) === Number(s.id)
+        );
+
+        const transaksiBulan = daftar.filter(t => {
+            const waktu = new Date(t.tanggal).getTime();
+            return waktu >= awal.getTime() &&
+                   waktu < akhir.getTime();
+        });
+
+        const setoran = transaksiBulan
+            .filter(t => t.jenis === "setoran")
+            .reduce((a, t) => a + Number(t.jumlah), 0);
+
+        const penarikan = transaksiBulan
+            .filter(t => t.jenis === "penarikan")
+            .reduce((a, t) => a + Number(t.jumlah), 0);
+
+        const saldoAkhir = daftar.reduce((a, t) => {
+            return a + (
+                t.jenis === "setoran"
+                ? Number(t.jumlah)
+                : -Number(t.jumlah)
+            );
+        }, 0);
+
+        totalSetoranBulan += setoran;
+        totalPenarikanBulan += penarikan;
+        totalSaldo += saldoAkhir;
+
+        return `
+            <tr>
+                <td>${i + 1}</td>
+                <td>${s.nis}</td>
+                <td>${s.nama_lengkap}</td>
+                <td>${s.kelas || "-"}</td>
+                <td>${rupiah(setoran)}</td>
+                <td>${rupiah(penarikan)}</td>
+                <td>${rupiah(saldoAkhir)}</td>
+            </tr>
+        `;
+    }).join("");
+
+    const namaBulan = awal.toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric"
+    });
+
+    jendela.document.open();
+    jendela.document.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <title>Laporan Tabungan Bulanan</title>
+            <style>
+                body { font-family: Arial; margin: 25px; }
+                h2, p { text-align: center; }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 25px;
+                }
+                th, td {
+                    border: 1px solid #555;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+                th { background: #dcfce7; }
+                .total {
+                    text-align: right;
+                    font-weight: bold;
+                    margin-top: 20px;
+                }
+                @media print {
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <h2>PPTQ AL-ITTIHAD MALAKKE</h2>
+            <p>LAPORAN TABUNGAN BULAN ${namaBulan.toUpperCase()}</p>
+            <hr>
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>NIS</th>
+                        <th>Nama Santri</th>
+                        <th>Kelas</th>
+                        <th>Setoran Bulan Ini</th>
+                        <th>Penarikan Bulan Ini</th>
+                        <th>Saldo Akhir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${baris || '<tr><td colspan="7">Belum ada data santri.</td></tr>'}
+                </tbody>
+            </table>
+            <p class="total">Total Setoran Bulan Ini: ${rupiah(totalSetoranBulan)}</p>
+            <p class="total">Total Penarikan Bulan Ini: ${rupiah(totalPenarikanBulan)}</p>
+            <p class="total">Total Saldo Akhir: ${rupiah(totalSaldo)}</p>
             <p>Belawa, ${new Date().toLocaleDateString("id-ID")}</p>
             <p>Pengelola Tabungan PPTQ Al-Ittihad</p>
             <button onclick="window.print()">CETAK LAPORAN</button>
