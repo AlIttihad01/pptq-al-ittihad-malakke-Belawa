@@ -116,19 +116,18 @@ document.getElementById("formDaftar")
     tombol.disabled = true;
     tombol.textContent = "MEMPROSES PENDAFTARAN...";
     pesan.textContent = "";
-
-    const { data, error } = await supabaseClient.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-            data: {
-                nama_orang_tua: nama,
-                no_hp: hp
-            }
+const { data, error } = await supabaseClient.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+        emailRedirectTo: "https://alittihad01.github.io/pptq-al-ittihad-malakke-Belawa/login-orangtua.html",
+        data: {
+            nama_orang_tua: nama,
+            no_hp: hp
         }
-    });
-
-    tombol.disabled = false;
+    }
+});
+       tombol.disabled = false;
     tombol.textContent = "DAFTAR SEKARANG";
 
     if (error) {
