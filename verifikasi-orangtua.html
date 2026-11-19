@@ -1,0 +1,234 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verifikasi Orang Tua - PPTQ Al-Ittihad</title>
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+}
+header {
+    background: #14532d;
+    color: white;
+    padding: 22px;
+    text-align: center;
+}
+.container {
+    max-width: 950px;
+    margin: 25px auto;
+    padding: 15px;
+}
+.card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px #0001;
+}
+button, select {
+    padding: 11px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    margin: 5px 3px;
+}
+button {
+    cursor: pointer;
+    color: white;
+    border: 0;
+}
+.setuju { background: #15803d; }
+.tolak { background: #dc2626; }
+.muat { background: #1d4ed8; }
+#pesan { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<header>
+<h2>VERIFIKASI PENDAFTARAN ORANG TUA</h2>
+<p>PPTQ AL-ITTIHAD MALAKKE BELAWA</p>
+</header>
+
+<div class="container">
+<div class="card">
+<h3>Daftar Pendaftaran Orang Tua</h3>
+<p>Halaman khusus pengelola/admin pesantren.</p>
+<button class="muat" onclick="muatPendaftaran()">
+MUAT DATA PENDAFTARAN
+</button>
+<button onclick="keluar()" style="background:#64748b">
+KELUAR
+</button>
+<p id="pesan"></p>
+</div>
+
+<div id="daftar"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const db = window.supabase.createClient(
+ "https://cpdkqqxvjfbcoucelhmr.supabase.co",
+ "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2"
+);
+
+async function periksaAdmin() {
+ const {data:{user},error} = await db.auth.getUser();
+
+ if(error || !user) {
+   alert("Silakan login sebagai admin terlebih dahulu.");
+   location.href = "admin.html";
+   return false;
+ }
+
+ const {data:profil,error:err} = await db
+   .from("profil_pengguna")
+   .select("peran")
+   .eq("id",user.id)
+   .maybeSingle();
+
+ if(err || profil?.peran !== "admin") {
+   alert("Akses hanya untuk admin.");
+   location.href = "admin.html";
+   return false;
+ }
+
+ return true;
+}
+
+async function muatPendaftaran() {
+ if(!await periksaAdmin()) return;
+
+ const pesan = document.getElementById("pesan");
+ const daftar = document.getElementById("daftar");
+
+ pesan.textContent = "Memuat data...";
+ daftar.innerHTML = "";
+
+ const {data,error} = await db
+   .from("pendaftaran_orang_tua")
+   .select("*")
+   .order("created_at",{ascending:false});
+
+ if(error) {
+   pesan.textContent = "Gagal memuat: " + error.message;
+   return;
+ }
+
+ const menunggu = data.filter(x => x.status === "menunggu");
+
+ pesan.textContent = "Jumlah pendaftaran menunggu: " + menunggu.length;
+
+ if(menunggu.length === 0) {
+   daftar.innerHTML = "<div class='card'>Belum ada pendaftaran menunggu.</div>";
+   return;
+ }
+
+ const {data:santri,error:errSantri} = await db
+   .from("santri")
+   .select("id,nis,nama_lengkap,kelas")
+   .order("nama_lengkap");
+
+ if(errSantri) {
+   pesan.textContent = "Gagal memuat santri: " + errSantri.message;
+   return;
+ }
+
+ menunggu.forEach(p => {
+   const pilihan = santri.map(s =>
+     `<option value="${s.id}">${aman(s.nama_lengkap)} - NIS ${aman(s.nis)} - Kelas ${aman(s.kelas || "-")}</option>`
+   ).join("");
+
+   const card = document.createElement("div");
+   card.className = "card";
+
+   const judul = document.createElement("h3");
+   judul.textContent = p.nama_orang_tua;
+
+   const info = document.createElement("p");
+   info.textContent = "WhatsApp: " + p.no_hp + " | Email: " + p.email;
+
+   const tanggal = document.createElement("p");
+   tanggal.textContent = "Tanggal daftar: " + new Date(p.created_at).toLocaleString("id-ID");
+
+   const pilih = document.createElement("select");
+   pilih.innerHTML = "<option value=''>-- Pilih Santri --</option>" + pilihan;
+
+   const tombolSetuju = document.createElement("button");
+   tombolSetuju.className = "setuju";
+   tombolSetuju.textContent = "SETUJUI";
+   tombolSetuju.onclick = () => setujui(p.id,pilih.value);
+
+   const tombolTolak = document.createElement("button");
+   tombolTolak.className = "tolak";
+   tombolTolak.textContent = "TOLAK";
+   tombolTolak.onclick = () => tolak(p.id);
+
+   card.append(judul,info,tanggal,pilih,tombolSetuju,tombolTolak);
+   daftar.appendChild(card);
+ });
+}
+
+function aman(v) {
+ return String(v ?? "").replace(/[&<>"']/g, c => ({
+  "&":"&amp;","<":"&lt;",">":"&gt;",
+  '"':"&quot;","'":"&#39;"
+ })[c]);
+}
+
+async function setujui(id,santriId) {
+ if(!santriId) {
+   alert("Pilih santri terlebih dahulu.");
+   return;
+ }
+
+ if(!confirm("Setujui pendaftaran dan hubungkan dengan santri ini?")) return;
+
+ const {error} = await db.rpc(
+   "setujui_pendaftaran_orang_tua",
+   {
+     p_pendaftaran_id:id,
+     p_santri_id:Number(santriId)
+   }
+ );
+
+ if(error) {
+   alert("Gagal menyetujui: " + error.message);
+   return;
+ }
+
+ alert("Pendaftaran berhasil disetujui.");
+ muatPendaftaran();
+}
+
+async function tolak(id) {
+ if(!confirm("Apakah Anda yakin menolak pendaftaran ini?")) return;
+
+ const {error} = await db.rpc(
+   "tolak_pendaftaran_orang_tua",
+   {p_pendaftaran_id:id}
+ );
+
+ if(error) {
+   alert("Gagal menolak: " + error.message);
+   return;
+ }
+
+ alert("Pendaftaran berhasil ditolak.");
+ muatPendaftaran();
+}
+
+async function keluar() {
+ await db.auth.signOut();
+ location.href = "admin.html";
+}
+
+periksaAdmin();
+</script>
+</body>
+</html>
