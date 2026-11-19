@@ -109,7 +109,76 @@ function rupiah(nilai) {
         maximumFractionDigits: 0
     }).format(Number(nilai) || 0);
 }
+function amanCetak(teks) {
+    return String(teks ?? "").replace(/[&<>"']/g, huruf => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[huruf]);
+}
 
+function cetakLaporan(s, riwayat, saldo) {
+    const jendela = window.open("", "_blank");
+
+    if (!jendela) {
+        alert("Izinkan pop-up agar laporan dapat dicetak.");
+        return;
+    }
+
+    const baris = riwayat.map(t => `
+        <tr>
+            <td>${amanCetak(new Date(t.tanggal).toLocaleDateString("id-ID"))}</td>
+            <td>${amanCetak(t.jenis)}</td>
+            <td>${amanCetak(rupiah(t.jumlah))}</td>
+            <td>${amanCetak(t.keterangan || "-")}</td>
+        </tr>
+    `).join("");
+
+    jendela.document.write(`
+        <html>
+        <head>
+            <title>Laporan Tabungan Santri</title>
+            <style>
+                body { font-family: Arial; padding: 25px; }
+                h2, p { text-align: center; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #555; padding: 8px; text-align: left; }
+                th { background: #eee; }
+                .saldo { font-weight: bold; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h2>LAPORAN TABUNGAN SANTRI</h2>
+            <p>PPTQ AL-ITTIHAD MALAKKE BELAWA</p>
+            <hr>
+            <p style="text-align:left">
+                Nama: ${amanCetak(s.nama_lengkap)}<br>
+                NIS: ${amanCetak(s.nis)}<br>
+                Kelas: ${amanCetak(s.kelas || "-")}
+            </p>
+            <table>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Jenis</th>
+                    <th>Jumlah</th>
+                    <th>Keterangan</th>
+                </tr>
+                ${baris}
+            </table>
+            <p class="saldo">Saldo Akhir: ${amanCetak(rupiah(saldo))}</p>
+            <p style="text-align:left">Dicetak pada: ${new Date().toLocaleDateString("id-ID")}</p>
+        </body>
+        </html>
+    `);
+
+    jendela.document.close();
+    jendela.focus();
+    jendela.print();
+}
+
+    
 async function muatDashboard() {
     const daftar = document.getElementById("daftarAnak");
     const pesan = document.getElementById("pesan");
@@ -218,7 +287,19 @@ async function muatDashboard() {
         nilai.className = "saldo";
         nilai.textContent = rupiah(saldo);
         card.appendChild(nilai);
+const tombolCetak = document.createElement("button");
+tombolCetak.textContent = "🖨️ CETAK LAPORAN TABUNGAN";
+tombolCetak.style.background = "#166534";
+tombolCetak.style.color = "white";
+tombolCetak.style.padding = "10px 15px";
+tombolCetak.style.border = "none";
+tombolCetak.style.borderRadius = "6px";
+tombolCetak.style.cursor = "pointer";
+tombolCetak.style.marginTop = "10px";
 
+tombolCetak.onclick = () => cetakLaporan(s, riwayat, saldo);
+
+card.appendChild(tombolCetak);
         const subjudul = document.createElement("h4");
         subjudul.textContent = "Riwayat Transaksi";
         card.appendChild(subjudul);
