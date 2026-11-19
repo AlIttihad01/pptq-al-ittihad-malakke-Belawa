@@ -92,7 +92,26 @@ th {
         <p id="status">Memeriksa akun...</p>
         <button class="logout" onclick="keluar()">Keluar</button>
     </div>
+<!-- DASHBOARD KEUANGAN PESANTREN -->
+<div class="card">
+    <h3>💰 Dashboard Keuangan Pesantren</h3>
 
+    <p>Total Saldo Seluruh Santri:</p>
+    <h2 id="totalSaldoSemua">Rp 0</h2>
+
+    <p>Total Setoran:</p>
+    <h3 id="totalSetoranSemua">Rp 0</h3>
+
+    <p>Total Penarikan:</p>
+    <h3 id="totalPenarikanSemua">Rp 0</h3>
+
+    <p>Jumlah Santri:</p>
+    <h3 id="jumlahSantriSemua">0 Santri</h3>
+
+    <button onclick="muatDashboardKeuangan()">
+        🔄 Perbarui Dashboard
+    </button>
+</div>
     <div class="card">
         <h3>Tambah Data Santri</h3>
 
@@ -264,6 +283,7 @@ async function periksaAdmin() {
 
     tampilkanSantri();
 muatPilihanSantri();
+    muatDashboardKeuangan();
     }
 
 function tampilkanPesan(teks, berhasil) {
@@ -463,7 +483,52 @@ function formatRupiah(nilai) {
     }).format(Number(nilai) || 0);
 }
 
-// MEMUAT SALDO DAN RIWAYAT
+// DASHBOARD KEUANGAN PESANTREN
+async function muatDashboardKeuangan() {
+    const elSaldo = document.getElementById("totalSaldoSemua");
+    const elSetoran = document.getElementById("totalSetoranSemua");
+    const elPenarikan = document.getElementById("totalPenarikanSemua");
+    const elJumlah = document.getElementById("jumlahSantriSemua");
+
+    elSaldo.textContent = "Memuat...";
+    elSetoran.textContent = "Memuat...";
+    elPenarikan.textContent = "Memuat...";
+    elJumlah.textContent = "Memuat...";
+
+    const { data: santri, error: errorSantri } = await supabaseClient
+        .from("santri")
+        .select("id");
+
+    if (errorSantri) {
+        alert("Gagal memuat data santri: " + errorSantri.message);
+        return;
+    }
+
+    const { data: transaksi, error: errorTransaksi } = await supabaseClient
+        .from("transaksi_tabungan")
+        .select("jenis, jumlah");
+
+    if (errorTransaksi) {
+        alert("Gagal memuat transaksi: " + errorTransaksi.message);
+        return;
+    }
+
+    const totalSetoran = (transaksi || [])
+        .filter(t => t.jenis === "setoran")
+        .reduce((total, t) => total + Number(t.jumlah || 0), 0);
+
+    const totalPenarikan = (transaksi || [])
+        .filter(t => t.jenis === "penarikan")
+        .reduce((total, t) => total + Number(t.jumlah || 0), 0);
+
+    const totalSaldo = totalSetoran - totalPenarikan;
+
+    elSaldo.textContent = formatRupiah(totalSaldo);
+    elSetoran.textContent = formatRupiah(totalSetoran);
+    elPenarikan.textContent = formatRupiah(totalPenarikan);
+    elJumlah.textContent = (santri || []).length + " Santri";
+}
+    // MEMUAT SALDO DAN RIWAYAT
 async function muatTabungan(santriId) {
     if (!santriId) return;
 
