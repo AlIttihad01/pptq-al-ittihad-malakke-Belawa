@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kasir Kantin - PPTQ Al-Ittihad</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;color:#1e293b}
+.wrap{max-width:680px;margin:24px auto;padding:14px}
+.card{background:white;border-radius:14px;padding:22px;margin-bottom:16px;box-shadow:0 3px 14px #0001}
+h1{color:#14532d}.muted{color:#64748b}
+input,button{width:100%;box-sizing:border-box;padding:13px;border-radius:8px;font-size:16px;margin-top:10px}
+input{border:1px solid #cbd5e1}button{border:0;background:#166534;color:white;cursor:pointer}
+button:disabled{opacity:.5}
+#scanner{width:100%;margin-top:12px}
+#siswa{display:none;background:#f0fdf4;padding:15px;border-radius:10px;margin-top:14px}
+.saldo{font-size:25px;color:#166534;font-weight:bold}
+#pesan{margin-top:12px}
+.danger{background:#b91c1c}
+</style>
+</head>
+<body><main class="wrap">
+<div class="card">
+<h1>Kasir Kantin PPTQ Al-Ittihad</h1>
+<p class="muted">Petugas login, pindai kartu QR santri, lalu masukkan nominal belanja.</p>
+<div id="loginBox">
+<input id="email" type="email" placeholder="Email petugas" autocomplete="username">
+<input id="password" type="password" placeholder="Kata sandi" autocomplete="current-password">
+<button id="login">LOGIN PETUGAS</button>
+</div>
+<div id="kasirBox" style="display:none">
+<p id="status"></p><button class="danger" id="logout">KELUAR</button>
+<div id="reader"></div>
+<button id="mulaiScan">MULAI PINDAI QR</button>
+<div id="siswa">
+<h3 id="nama"></h3><p id="identitas"></p>
+<div>Saldo tersedia</div><div class="saldo" id="saldo"></div>
+<input id="jumlah" type="number" min="1" step="1" placeholder="Nominal belanja (Rupiah)">
+<input id="keterangan" type="text" maxlength="200" placeholder="Keterangan/barang (opsional)">
+<button id="bayar">KONFIRMASI PEMBAYARAN</button>
+</div>
+<p id="pesan"></p>
+</div>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+const supabaseClient=window.supabase.createClient("https://cpdkqqxvjfbcoucelhmr.supabase.co","sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2");
+const el=id=>document.getElementById(id);let qrToken=null,student=null,scanner=null;
+function rupiah(v){return new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(v)||0)}
+async function checkSession(){
+ const {data:{session}}=await supabaseClient.auth.getSession();
+ if(!session)return;
+ const {data:p,error}=await supabaseClient.from("profil_pengguna").select("nama,peran").eq("id",session.user.id).single();
+ if(error||!p||!["admin","petugas_kantin"].includes(p.peran)){await supabaseClient.auth.signOut();el("pesan").textContent="Akun ini bukan petugas kantin.";return}
+ el("loginBox").style.display="none";el("kasirBox").style.display="block";el("status").textContent="Login: "+p.nama+" ("+p.peran+")";
+}
+el("login").onclick=async()=>{
+ const {error}=await supabaseClient.auth.signInWithPassword({email:el("email").value,password:el("password").value});
+ if(error){el("pesan").textContent="Login gagal: "+error.message;return}
+ await checkSession();
+};
+el("logout").onclick=async()=>{if(scanner){try{await scanner.stop()}catch(e){}}await supabaseClient.auth.signOut();location.reload()};
+async function prosesScan(decoded){
+ if(scanner){try{await scanner.stop()}catch(e){}}
+ qrToken=decoded;el("pesan").textContent="Memeriksa QR...";
+ const {data,error}=await supabaseClient.rpc("pratinjau_pembayaran_qr",{p_token:qrToken});
+ if(error){qrToken=null;el("pesan").textContent="QR tidak dapat digunakan: "+error.message;return}
+ student=data&&data[0];
+ if(!student){qrToken=null;el("pesan").textContent="Data santri tidak ditemukan.";return}
+ el("nama").textContent=student.nama_lengkap;el("identitas").textContent="NIS: "+student.nis+" | Kelas: "+(student.kelas||"-");
+ el("saldo").textContent=rupiah(student.saldo);el("siswa").style.display="block";el("pesan").textContent="QR valid. Periksa nama santri sebelum menagih.";
+}
+el("mulaiScan").onclick=async()=>{
+ if(!window.Html5Qrcode){el("pesan").textContent="Pemindai tidak berhasil dimuat.";return}
+ el("siswa").style.display="none";qrToken=null;
+ scanner=new Html5Qrcode("reader");
+ try{await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:230,height:230}},prosesScan,()=>{})}
+ catch(e){el("pesan").textContent="Kamera gagal dibuka. Pastikan izin kamera diberikan dan website dibuka melalui HTTPS. "+e}
+};
+el("bayar").onclick=async()=>{
+ const amount=Number(el("jumlah").value);
+ if(!qrToken||!student){el("pesan").textContent="Pindai QR santri terlebih dahulu.";return}
+ if(!Number.isSafeInteger(amount)||amount<=0){el("pesan").textContent="Masukkan nominal Rupiah positif tanpa desimal.";return}
+ if(amount>Number(student.saldo)){el("pesan").textContent="Saldo tidak mencukupi.";return}
+ if(!confirm("Potong saldo "+student.nama_lengkap+" sebesar "+rupiah(amount)+"?"))return;
+ el("bayar").disabled=true;el("pesan").textContent="Memproses pembayaran...";
+ const {data,error}=await supabaseClient.rpc("proses_pembelian_kantin_qr",{p_token:qrToken,p_jumlah:amount,p_keterangan:el("keterangan").value.trim()||null});
+ el("bayar").disabled=false;
+ if(error){el("pesan").textContent="Pembayaran gagal: "+error.message;return}
+ el("pesan").textContent="Pembayaran berhasil. Nomor transaksi: "+data+". Saldo terpotong "+rupiah(amount)+".";
+ el("siswa").style.display="none";qrToken=null;student=null;el("jumlah").value="";el("keterangan").value="";
+};
+checkSession();
+</script></body></html>
