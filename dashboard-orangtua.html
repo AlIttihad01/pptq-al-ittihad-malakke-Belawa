@@ -254,7 +254,7 @@ async function muatDashboard() {
 
     daftar.innerHTML = "";
 
-    santri.forEach(s => {
+    for (const s of santri) {
         const riwayat = (transaksi || []).filter(
             t => t.santri_id === s.id
         );
@@ -354,8 +354,76 @@ card.appendChild(tombolCetak);
         tabel.appendChild(badan);
         pembungkus.appendChild(tabel);
         card.appendChild(pembungkus);
+
+        const judulBelanja = document.createElement("h4");
+        judulBelanja.textContent = "Riwayat Belanja Kantin";
+        card.appendChild(judulBelanja);
+        const areaBelanja = document.createElement("div");
+        areaBelanja.textContent = "Memuat riwayat belanja...";
+        card.appendChild(areaBelanja);
+
+        const { data: belanja, error: errorBelanja } = await supabaseClient
+            .from("transaksi_kantin")
+            .select("id, jumlah, tanggal, keterangan")
+            .eq("santri_id", s.id)
+            .order("tanggal", { ascending: false })
+            .limit(30);
+
+        if (errorBelanja) {
+            areaBelanja.textContent = "Riwayat belanja belum dapat dimuat: " + errorBelanja.message;
+        } else if (!belanja || belanja.length === 0) {
+            areaBelanja.textContent = "Belum ada transaksi belanja kantin.";
+        } else {
+            const totalBelanja = belanja.reduce((sum, x) => sum + Number(x.jumlah || 0), 0);
+            const ringkasan = document.createElement("p");
+            ringkasan.className = "saldo";
+            ringkasan.textContent = "Total belanja pada 30 transaksi terakhir: " + rupiah(totalBelanja);
+            areaBelanja.innerHTML = "";
+            areaBelanja.appendChild(ringkasan);
+
+            const tabelBelanja = document.createElement("table");
+            const theadBelanja = document.createElement("thead");
+            const trHead = document.createElement("tr");
+            ["Tanggal", "Barang dibeli", "Total"].forEach(label => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                trHead.appendChild(th);
+            });
+            theadBelanja.appendChild(trHead);
+            tabelBelanja.appendChild(theadBelanja);
+            const tbodyBelanja = document.createElement("tbody");
+
+            for (const b of belanja) {
+                const { data: rincian, error: errorRincian } = await supabaseClient
+                    .from("transaksi_kantin_item")
+                    .select("nama_produk, jumlah, subtotal")
+                    .eq("transaksi_kantin_id", b.id);
+
+                const tr = document.createElement("tr");
+                const tdTanggal = document.createElement("td");
+                tdTanggal.textContent = new Date(b.tanggal).toLocaleString("id-ID");
+                const tdBarang = document.createElement("td");
+                if (errorRincian) {
+                    tdBarang.textContent = "Rincian belum dapat dimuat";
+                } else if (rincian && rincian.length) {
+                    tdBarang.textContent = rincian.map(x => x.nama_produk + " × " + x.jumlah).join(", ");
+                } else {
+                    tdBarang.textContent = b.keterangan || "Transaksi kantin";
+                }
+                const tdTotal = document.createElement("td");
+                tdTotal.textContent = rupiah(b.jumlah);
+                tr.append(tdTanggal, tdBarang, tdTotal);
+                tbodyBelanja.appendChild(tr);
+            }
+            tabelBelanja.appendChild(tbodyBelanja);
+            const wrapBelanja = document.createElement("div");
+            wrapBelanja.className = "table-wrap";
+            wrapBelanja.appendChild(tabelBelanja);
+            areaBelanja.appendChild(wrapBelanja);
+        }
+
         daftar.appendChild(card);
-    });
+    }
 }
 
 async function keluar() {
