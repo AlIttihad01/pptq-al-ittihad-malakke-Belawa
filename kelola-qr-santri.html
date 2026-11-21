@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kartu QR Santri - PPTQ Al-Ittihad</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;color:#1e293b}
+.wrap{max-width:850px;margin:28px auto;padding:16px}
+.card{background:#fff;border-radius:14px;padding:22px;margin-bottom:18px;box-shadow:0 3px 14px #0001}
+h1,h2{color:#14532d}select,button{padding:12px;border-radius:8px;font-size:15px}
+select{width:100%;border:1px solid #cbd5e1;margin:10px 0}
+button{border:0;background:#166534;color:#fff;cursor:pointer}
+button:disabled{opacity:.5}
+#qrCard{display:none;border:2px dashed #166534;padding:20px;max-width:360px;text-align:center;margin:20px auto;background:#fff}
+#qrcode{display:flex;justify-content:center;margin:18px}
+.notice{background:#fff7ed;padding:12px;border-radius:8px;color:#9a3412}
+#pesan{margin-top:12px}
+@media print{body *{visibility:hidden}#qrCard,#qrCard *{visibility:visible}#qrCard{display:block!important;position:absolute;left:0;top:0;width:85%;border:0}}
+</style>
+</head>
+<body><main class="wrap">
+<div class="card">
+<h1>Penerbitan Kartu QR Santri</h1>
+<p>Admin menerbitkan QR Code unik untuk kartu pembayaran kantin setiap santri.</p>
+<p id="status">Memeriksa akun administrator...</p>
+<label for="pilihSantri">Pilih santri</label>
+<select id="pilihSantri"><option value="">Memuat data santri...</option></select>
+<button id="buatQr" disabled>Terbitkan / Ganti QR Code</button>
+<p id="pesan"></p>
+</div>
+<div class="card">
+<div class="notice"><b>Penting:</b> QR yang baru diterbitkan menggantikan QR lama. Simpan atau cetak kartu segera. Token hanya ditampilkan pada saat penerbitan dan tidak dapat dilihat kembali.</div>
+<div id="qrCard">
+<h2>PPTQ AL-ITTIHAD MALAKKE</h2>
+<h3>KARTU PEMBAYARAN SANTRI</h3>
+<div id="namaSantri"></div>
+<div id="qrcode"></div>
+<p>Gunakan QR ini untuk pembayaran di kantin pondok.</p>
+</div>
+<button id="cetak" style="display:none" onclick="window.print()">Cetak Kartu QR</button>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const supabaseClient=window.supabase.createClient("https://cpdkqqxvjfbcoucelhmr.supabase.co","sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2");
+const el=id=>document.getElementById(id);
+async function init(){
+ const {data:{session}}=await supabaseClient.auth.getSession();
+ if(!session){location.href="admin.html";return}
+ const {data:profil,error}=await supabaseClient.from("profil_pengguna").select("nama,peran").eq("id",session.user.id).single();
+ if(error||!profil||profil.peran!=="admin"){await supabaseClient.auth.signOut();location.href="admin.html";return}
+ el("status").textContent="Login sebagai admin: "+profil.nama;
+ const {data,error:e}=await supabaseClient.from("santri").select("id,nis,nama_lengkap,kelas").eq("status","aktif").order("nama_lengkap");
+ if(e){el("pesan").textContent="Gagal memuat santri: "+e.message;return}
+ el("pilihSantri").innerHTML='<option value="">-- Pilih Santri --</option>';
+ (data||[]).forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.nama_lengkap+" | NIS "+s.nis+" | "+(s.kelas||"-");o.dataset.nama=s.nama_lengkap;o.dataset.nis=s.nis;o.dataset.kelas=s.kelas||"";el("pilihSantri").appendChild(o)});
+ el("buatQr").disabled=false;
+}
+el("buatQr").addEventListener("click",async()=>{
+ const id=el("pilihSantri").value, opt=el("pilihSantri").selectedOptions[0];
+ if(!id){el("pesan").textContent="Pilih santri terlebih dahulu.";return}
+ if(!confirm("Terbitkan QR untuk "+opt.dataset.nama+"? QR lama santri ini akan dinonaktifkan."))return;
+ el("buatQr").disabled=true;el("pesan").textContent="Menerbitkan QR...";
+ const {data,error}=await supabaseClient.rpc("terbitkan_qr_santri",{p_santri_id:Number(id)});
+ el("buatQr").disabled=false;
+ if(error){el("pesan").textContent="Gagal menerbitkan QR: "+error.message;return}
+ el("namaSantri").textContent=opt.dataset.nama+" | NIS: "+opt.dataset.nis+" | Kelas: "+opt.dataset.kelas;
+ el("qrcode").innerHTML="";
+ new QRCode(el("qrcode"),{text:data,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
+ el("qrCard").style.display="block";el("cetak").style.display="inline-block";
+ el("pesan").textContent="QR berhasil diterbitkan. Segera cetak/simpan kartu. Token tidak akan ditampilkan lagi setelah halaman ditutup.";
+});
+init();
+</script></body></html>
