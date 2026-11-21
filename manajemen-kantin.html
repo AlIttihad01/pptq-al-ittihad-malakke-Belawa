@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manajemen Produk Kantin - PPTQ Al-Ittihad</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;color:#1e293b}.wrap{max-width:900px;margin:24px auto;padding:14px}.card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 3px 14px #0001}h1,h2{color:#14532d}input,button{width:100%;padding:12px;border-radius:8px;font-size:15px;margin-top:9px}input{border:1px solid #cbd5e1}button{border:0;background:#166534;color:#fff;cursor:pointer}button:disabled{opacity:.5}.secondary{background:#475569}.danger{background:#b91c1c}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.product{border:1px solid #e2e8f0;padding:13px;border-radius:10px;margin-top:10px}.product strong{display:block;font-size:17px}.muted{color:#64748b;font-size:13px}.actions{display:flex;gap:8px}.actions button{flex:1}.price{color:#166534;font-weight:bold;margin-top:5px}#app{display:none}#pesan{margin-top:12px;white-space:pre-wrap}@media(max-width:600px){.grid{grid-template-columns:1fr}.actions{flex-direction:column}}
+</style>
+</head>
+<body><main class="wrap">
+<div class="card">
+<h1>Manajemen Produk Kantin</h1>
+<p class="muted">PPTQ Al-Ittihad Malakke · Pengelolaan katalog makanan dan minuman</p>
+<div id="loginBox">
+<input id="email" type="email" placeholder="Email administrator" autocomplete="username">
+<input id="password" type="password" placeholder="Kata sandi" autocomplete="current-password">
+<button id="login">LOGIN ADMIN</button>
+</div>
+<div id="app">
+<p id="status"></p><button class="secondary" id="logout">KELUAR</button>
+</div>
+<p id="pesan"></p>
+</div>
+<section id="formCard" class="card" style="display:none">
+<h2 id="formTitle">Tambah Produk</h2>
+<input id="nama" maxlength="120" placeholder="Nama produk (misalnya: Nasi kuning)">
+<div class="grid">
+<input id="kategori" maxlength="60" placeholder="Kategori (Makanan/Minuman)">
+<input id="harga" type="number" min="1" step="1" placeholder="Harga (Rupiah)">
+</div>
+<div class="grid">
+<button id="simpan">SIMPAN PRODUK</button>
+<button class="secondary" id="batal">BATAL / KOSONGKAN</button>
+</div>
+</section>
+<section id="listCard" class="card" style="display:none">
+<div class="grid"><h2>Daftar Produk</h2><button id="muat" class="secondary">MUAT ULANG</button></div>
+<div id="daftar"></div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const db=window.supabase.createClient("https://cpdkqqxvjfbcoucelhmr.supabase.co","sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2");
+const el=id=>document.getElementById(id);let user=null,editId=null;
+const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
+function pesan(t){el("pesan").textContent=t}
+async function masuk(){
+ const {data:{session}}=await db.auth.getSession();if(!session)return;
+ const {data:p,error}=await db.from("profil_pengguna").select("nama,peran").eq("id",session.user.id).single();
+ if(error||!p||p.peran!=="admin"){await db.auth.signOut();pesan("Akses ditolak. Halaman ini khusus administrator.");return}
+ user=session.user;el("loginBox").style.display="none";el("app").style.display="block";el("formCard").style.display="block";el("listCard").style.display="block";el("status").textContent="Login sebagai admin: "+p.nama;await muatProduk();
+}
+el("login").onclick=async()=>{const {error}=await db.auth.signInWithPassword({email:el("email").value.trim(),password:el("password").value});if(error){pesan("Login gagal: "+error.message);return}await masuk()};
+el("logout").onclick=async()=>{await db.auth.signOut();location.reload()};
+function kosongkan(){editId=null;el("formTitle").textContent="Tambah Produk";el("nama").value="";el("kategori").value="";el("harga").value="";el("simpan").textContent="SIMPAN PRODUK"}
+el("batal").onclick=kosongkan;
+el("simpan").onclick=async()=>{
+ const nama=el("nama").value.trim(),kategori=el("kategori").value.trim()||"Lainnya",harga=Number(el("harga").value);
+ if(!nama||!Number.isSafeInteger(harga)||harga<=0){pesan("Isi nama produk dan harga Rupiah yang benar.");return}
+ el("simpan").disabled=true;
+ const payload={nama_produk:nama,kategori,harga,diubah_pada:new Date().toISOString()};
+ let result;
+ if(editId)result=await db.from("produk_kantin").update(payload).eq("id",editId);
+ else result=await db.from("produk_kantin").insert({...payload,dibuat_oleh:user.id});
+ el("simpan").disabled=false;
+ if(result.error){pesan("Gagal menyimpan: "+result.error.message);return}
+ pesan(editId?"Produk berhasil diperbarui.":"Produk berhasil ditambahkan.");kosongkan();await muatProduk();
+};
+async function ubahStatus(id,aktif){const {error}=await db.from("produk_kantin").update({aktif,diubah_pada:new Date().toISOString()}).eq("id",id);if(error){pesan("Gagal mengubah status: "+error.message);return}pesan(aktif?"Produk diaktifkan.":"Produk dinonaktifkan.");await muatProduk()}
+async function muatProduk(){
+ el("daftar").textContent="Memuat produk...";
+ const {data,error}=await db.from("produk_kantin").select("id,nama_produk,kategori,harga,aktif").order("nama_produk");
+ if(error){el("daftar").textContent="Gagal memuat: "+error.message;return}
+ if(!data.length){el("daftar").textContent="Belum ada produk. Silakan tambahkan produk pertama.";return}
+ el("daftar").innerHTML="";
+ data.forEach(p=>{
+  const box=document.createElement("div");box.className="product";
+  const name=document.createElement("strong");name.textContent=p.nama_produk;
+  const meta=document.createElement("div");meta.className="muted";meta.textContent=p.kategori+" · "+(p.aktif?"Aktif":"Nonaktif");
+  const price=document.createElement("div");price.className="price";price.textContent=rupiah(p.harga);
+  const actions=document.createElement("div");actions.className="actions";
+  const edit=document.createElement("button");edit.className="secondary";edit.textContent="EDIT";edit.onclick=()=>{editId=p.id;el("formTitle").textContent="Edit Produk";el("nama").value=p.nama_produk;el("kategori").value=p.kategori;el("harga").value=p.harga;el("simpan").textContent="SIMPAN PERUBAHAN";window.scrollTo({top:0,behavior:"smooth"})};
+  const toggle=document.createElement("button");toggle.className=p.aktif?"danger":"";toggle.textContent=p.aktif?"NONAKTIFKAN":"AKTIFKAN";toggle.onclick=()=>ubahStatus(p.id,!p.aktif);
+  actions.append(edit,toggle);box.append(name,meta,price,actions);el("daftar").append(box);
+ });
+}
+el("muat").onclick=muatProduk;masuk();
+</script></body></html>
