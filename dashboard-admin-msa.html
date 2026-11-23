@@ -23,6 +23,23 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
 #pesan{margin:10px 0}.error{color:#b91c1c}.success{color:#166534}.muted{color:#64748b}
 @media(max-width:600px){header h1{font-size:20px}.topbar{align-items:flex-start}}
 .report-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.report-form label{display:flex;flex-direction:column;gap:5px;font-weight:600}.report-form input,.report-form select,.report-form textarea{font:inherit;padding:10px;border:1px solid #cbd5e1;border-radius:7px;background:white;width:100%}.report-form .full{grid-column:1/-1}.share-preview{margin:14px 0;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px}
+
+#laporanCetakArea{margin-top:18px}
+#laporanCetakArea table{width:100%;border-collapse:collapse;margin:10px 0 18px}
+#laporanCetakArea th,#laporanCetakArea td{border:1px solid #cbd5e1;padding:8px;text-align:left}
+#laporanCetakArea th{background:#ecfdf5;color:#065f46}
+#laporanCetakArea .report-heading{text-align:center;margin-bottom:18px}
+#laporanCetakArea .report-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media print{
+ body.printing *{visibility:hidden!important}
+ body.printing #laporanCetakArea,body.printing #laporanCetakArea *{visibility:visible!important}
+ body.printing #laporanCetakArea{position:absolute;left:0;top:0;width:100%;margin:0;padding:12mm;background:white;color:#111827}
+ body.printing #cardLaporanCetak{border:0;box-shadow:none;padding:0;margin:0}
+ body.printing .print-controls{display:none!important}
+ body.printing #laporanCetakArea table{font-size:10pt;page-break-inside:auto}
+ body.printing #laporanCetakArea tr{page-break-inside:avoid;page-break-after:auto}
+ @page{size:A4 portrait;margin:12mm}
+}
 </style>
 </head>
 <body>
@@ -78,6 +95,13 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
 <label class="full">Keterangan (opsional)<textarea id="bayarCatatan" rows="2"></textarea></label><div class="full"><button class="btn" id="simpanBayarHasil" type="submit">SIMPAN PEMBAYARAN</button></div></form>
 <p id="pesanBayarHasil" role="status" aria-live="polite"></p><h4>Rekap hak dan pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Periode / Pemohon</th><th>Penerima</th><th>Hak</th><th>Sudah dibayar</th><th>Sisa</th><th>Status</th></tr></thead><tbody id="rekapBayarHasil"><tr><td colspan="6">Memuat rekap...</td></tr></tbody></table></div>
 <h4>Riwayat transaksi pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Penerima</th><th>Jumlah</th><th>Metode</th><th>Catatan</th></tr></thead><tbody id="riwayatBayarHasil"><tr><td colspan="5">Memuat riwayat...</td></tr></tbody></table></div></section>
+<section class="card" id="cardLaporanCetak">
+ <h3>Laporan Keuangan Bulanan MSA Islamic Bank</h3>
+ <p class="muted print-controls">Pilih bulan untuk melihat laporan keuntungan, pembagian hak, pembayaran, dan saldo yang belum dibayarkan. Gunakan tombol cetak lalu pilih “Save as PDF” bila ingin menyimpan PDF.</p>
+ <div class="filters print-controls"><label for="bulanCetak"><strong>Periode laporan:</strong></label><select id="bulanCetak"><option value="">Memuat periode...</option></select><button class="btn" id="tombolCetakLaporan" type="button">CETAK / SIMPAN PDF</button></div>
+ <p id="pesanCetakLaporan" class="print-controls muted" role="status"></p>
+ <div id="laporanCetakArea"><p class="muted">Pilih periode dan tekan Cetak / Simpan PDF untuk menampilkan laporan.</p></div>
+ </section>
  <section class="card">
   <div class="filters">
    <label for="filterStatus"><strong>Filter status:</strong></label>
@@ -184,6 +208,52 @@ document.getElementById("formBayarHasil").addEventListener("submit",async e=>{
  btn.disabled=false;if(error){pesanBayar("error","Pembayaran gagal dicatat: "+error.message);return;}pesanBayar("success","Pembayaran berhasil dicatat.");e.target.reset();metodeBayarFields();await muatRekapBayar();await muatPilihanBayar();
 });
 document.getElementById("bayarMetode").addEventListener("change",metodeBayarFields);
+async function muatPilihanCetak(){
+ const s=document.getElementById("bulanCetak");
+ const {data,error}=await db.from("laporan_keuntungan_musyarakah").select("periode_bulan").order("periode_bulan",{ascending:false});
+ s.replaceChildren();
+ if(error){s.append(node("option","Gagal memuat periode"));document.getElementById("pesanCetakLaporan").textContent=error.message;return;}
+ const periods=[...new Set((data||[]).map(x=>x.periode_bulan))];
+ if(!periods.length){s.append(node("option","Belum ada laporan"));return;}
+ periods.forEach(p=>{const o=node("option",new Date(p+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"}));o.value=p;s.append(o);});
+}
+function tambahBarisLaporan(tbody,values,header=false){const tr=document.createElement("tr");values.forEach(v=>tr.append(node(header?"th":"td",v)));tbody.append(tr);}
+async function cetakLaporanBulanan(){
+ const period=document.getElementById("bulanCetak").value,area=document.getElementById("laporanCetakArea"),msg=document.getElementById("pesanCetakLaporan");
+ if(!period){msg.textContent="Belum ada periode laporan yang dapat dicetak.";return;}
+ msg.textContent="Menyiapkan laporan...";
+ const {data:reports,error}=await db.from("laporan_keuntungan_musyarakah").select("id,pengajuan_id,periode_bulan,omzet,biaya_usaha,keuntungan_bersih,bagian_msa,bagian_pengelola,bagian_operasional,bagian_admin,catatan,dibuat_pada").eq("periode_bulan",period).order("dibuat_pada");
+ if(error){msg.textContent="Gagal memuat laporan: "+error.message;return;}
+ if(!reports?.length){msg.textContent="Tidak ada laporan untuk periode ini.";return;}
+ const ids=[...new Set(reports.map(x=>x.pengajuan_id))],reportIds=reports.map(x=>x.id);
+ const [apps,pays]=await Promise.all([db.from("pengajuan_pinjaman").select("id,nama_pemohon,akad_diusulkan,jumlah_diajukan").in("id",ids),db.from("pembayaran_bagi_hasil_musyarakah").select("laporan_id,penerima,jumlah_dibayar,tanggal_bayar,metode_pembayaran,keterangan,nomor_referensi").in("laporan_id",reportIds).order("tanggal_bayar")]);
+ if(apps.error||pays.error){msg.textContent="Gagal memuat rincian: "+(apps.error?.message||pays.error?.message);return;}
+ const appMap=Object.fromEntries((apps.data||[]).map(x=>[x.id,x]));
+ const labels={msa:"MSA Islamic Bank",pengelola:"Pengelola usaha",operasional:"Operasional",admin:"Admin"};
+ const rights={msa:"bagian_msa",pengelola:"bagian_pengelola",operasional:"bagian_operasional",admin:"bagian_admin"};
+ area.replaceChildren();
+ const heading=node("div");heading.className="report-heading";heading.append(node("h2","MSA ISLAMIC BANK"),node("h3","LAPORAN KEUANGAN BULANAN"));area.append(heading);
+ const meta=node("div");meta.className="report-meta";meta.append(node("p","Periode: "+new Date(period+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"})),node("p","Dicetak: "+new Date().toLocaleString("id-ID")));area.append(meta);
+ let sumOmzet=0,sumBiaya=0,sumProfit=0,sumPaid=0,sumDue=0;
+ reports.forEach((r,index)=>{
+  const app=appMap[r.pengajuan_id]||{},rp=(pays.data||[]).filter(p=>p.laporan_id===r.id);
+  area.append(node("h3",(index+1)+". "+(app.nama_pemohon||"Pemohon tidak diketahui")+" • "+(app.akad_diusulkan||"Musyarakah")));
+  const tbl=document.createElement("table"),tb=document.createElement("tbody");tambahBarisLaporan(tb,["Uraian","Jumlah"],true);
+  [["Omzet usaha",rupiah(r.omzet)],["Biaya usaha",rupiah(r.biaya_usaha)],["Keuntungan bersih",rupiah(r.keuntungan_bersih)]].forEach(v=>tambahBarisLaporan(tb,v));tbl.append(tb);area.append(tbl);
+  const payTbl=document.createElement("table"),pt=document.createElement("tbody");tambahBarisLaporan(pt,["Penerima","Hak","Sudah dibayar","Sisa","Status"],true);
+  Object.keys(labels).forEach(who=>{const right=Number(r[rights[who]])||0,paid=rp.filter(p=>p.penerima===who).reduce((a,p)=>a+Number(p.jumlah_dibayar),0),due=Math.max(0,right-paid);sumPaid+=paid;sumDue+=due;tambahBarisLaporan(pt,[labels[who],rupiah(right),rupiah(paid),rupiah(due),due===0?"Lunas":"Belum lunas"]);});payTbl.append(pt);area.append(payTbl);
+  if(rp.length){area.append(node("h4","Riwayat pembayaran"));const hist=document.createElement("table"),ht=document.createElement("tbody");tambahBarisLaporan(ht,["Tanggal","Penerima","Jumlah","Metode","Keterangan"],true);rp.forEach(p=>tambahBarisLaporan(ht,[tanggal(p.tanggal_bayar),labels[p.penerima]||p.penerima,rupiah(p.jumlah_dibayar),p.metode_pembayaran==="tunai"?"Tunai":"Transfer",p.keterangan||p.nomor_referensi||"-"]));hist.append(ht);area.append(hist);}
+  if(r.catatan)area.append(node("p","Catatan: "+r.catatan));
+  sumOmzet+=Number(r.omzet);sumBiaya+=Number(r.biaya_usaha);sumProfit+=Number(r.keuntungan_bersih);
+ });
+ area.append(node("h3","RINGKASAN PERIODE"));
+ const summary=document.createElement("table"),st=document.createElement("tbody");tambahBarisLaporan(st,["Keterangan","Jumlah"],true);
+ [["Total omzet",rupiah(sumOmzet)],["Total biaya usaha",rupiah(sumBiaya)],["Total keuntungan bersih",rupiah(sumProfit)],["Total bagi hasil sudah dibayar",rupiah(sumPaid)],["Total sisa belum dibayar",rupiah(sumDue)]].forEach(v=>tambahBarisLaporan(st,v));summary.append(st);area.append(summary);
+ msg.textContent="Laporan siap dicetak. Pada dialog cetak, pilih “Save as PDF” untuk menyimpan PDF.";
+ document.body.classList.add("printing");window.print();setTimeout(()=>document.body.classList.remove("printing"),1200);
+}
+document.getElementById("tombolCetakLaporan").addEventListener("click",cetakLaporanBulanan);
+
 async function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
  if(error||!data.session){location.replace("admin.html");return;}
@@ -196,6 +266,7 @@ async function periksaAdmin(){
  await muatRiwayatLaporan();
  await muatPilihanBayar();
  await muatRekapBayar();
+ await muatPilihanCetak();
  metodeBayarFields();
 }
 async function muatPengajuan(){
