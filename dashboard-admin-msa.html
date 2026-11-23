@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Admin - MSA Islamic Bank</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.5}
+header{background:linear-gradient(135deg,#064b35,#08734b);color:white;padding:22px 16px;text-align:center}
+header h1{margin:0;font-size:24px}header p{margin:6px 0 0}
+.container{max-width:1200px;margin:24px auto;padding:0 14px}
+.topbar,.card{background:white;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 2px 9px #0000000d}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+button,select{font:inherit}button{border:0;border-radius:7px;padding:10px 14px;cursor:pointer;font-weight:600}
+button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn-danger{background:#b91c1c;color:white}.btn-muted{background:#e2e8f0;color:#1e293b}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:15px}
+.stat small{color:#64748b}.stat strong{display:block;font-size:23px;margin-top:6px;color:#075333}
+.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.filters select{padding:10px;border:1px solid #cbd5e1;border-radius:7px;background:white}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:920px}th,td{padding:11px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}th{background:#ecfdf5;color:#075333}
+.pill{display:inline-block;padding:4px 9px;border-radius:20px;font-size:12px;font-weight:bold;background:#fef3c7;color:#92400e}
+.pill.ok{background:#dcfce7;color:#166534}.pill.no{background:#fee2e2;color:#991b1b}
+.actions{display:flex;gap:6px;flex-wrap:wrap}.detail{max-width:320px;white-space:normal;overflow-wrap:anywhere;color:#475569;font-size:13px}
+#pesan{margin:10px 0}.error{color:#b91c1c}.success{color:#166534}.muted{color:#64748b}
+@media(max-width:600px){header h1{font-size:20px}.topbar{align-items:flex-start}}
+</style>
+</head>
+<body>
+<header><h1>MSA ISLAMIC BANK</h1><p>Dashboard Pengelolaan Pembiayaan • Admin</p></header>
+<main class="container">
+ <section class="topbar">
+  <div><strong id="namaAdmin">Memeriksa akun Admin...</strong><div class="muted">Pengelolaan pengajuan pembiayaan</div></div>
+  <div class="actions"><button class="btn-muted" id="muatUlang">Muat Ulang</button><button class="btn-danger" id="keluar">Keluar</button></div>
+ </section>
+ <section class="card">
+  <h3>Ringkasan Pengajuan</h3>
+  <div class="stats">
+   <div class="stat"><small>Semua Pengajuan</small><strong id="jumlahSemua">0</strong></div>
+   <div class="stat"><small>Menunggu</small><strong id="jumlahMenunggu">0</strong></div>
+   <div class="stat"><small>Disetujui</small><strong id="jumlahDisetujui">0</strong></div>
+   <div class="stat"><small>Ditolak</small><strong id="jumlahDitolak">0</strong></div>
+   <div class="stat"><small>Total Nominal Diajukan</small><strong id="totalNominal">Rp0</strong></div>
+  </div>
+ </section>
+ <section class="card">
+  <div class="filters">
+   <label for="filterStatus"><strong>Filter status:</strong></label>
+   <select id="filterStatus"><option value="semua">Semua status</option><option value="menunggu">Menunggu</option><option value="disetujui">Disetujui</option><option value="ditolak">Ditolak</option><option value="dibatalkan">Dibatalkan</option></select>
+   <span class="muted" id="jumlahTampil"></span>
+  </div>
+  <p id="pesan" role="status" aria-live="polite"></p>
+  <div class="table-wrap"><table>
+   <thead><tr><th>Tanggal</th><th>Pemohon</th><th>Kategori</th><th>Tujuan & Akad</th><th>Jumlah</th><th>Status</th><th>Uraian & Catatan</th><th>Tindakan</th></tr></thead>
+   <tbody id="daftar"><tr><td colspan="8">Memuat data pengajuan...</td></tr></tbody>
+  </table></div>
+ </section>
+ <p><a href="dashboard-admin.html">← Kembali ke Dashboard Admin PPTQ</a></p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const db=window.supabase.createClient("https://cpdkqqxvjfbcoucelhmr.supabase.co","sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2");
+let adminId=null,rows=[];
+const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
+const tanggal=v=>v?new Date(v).toLocaleString("id-ID",{dateStyle:"medium",timeStyle:"short"}):"-";
+const labelKategori=v=>({orang_tua:"Orang tua santri",pengurus:"Pengurus",guru:"Guru",masyarakat_umum:"Masyarakat umum"}[v]||v);
+const labelTujuan=v=>({pribadi_keluarga:"Pribadi / keluarga",modal_usaha:"Modal usaha",pendidikan:"Pendidikan"}[v]||v);
+const labelAkad=v=>({qardh_hasan:"Qardh Hasan",mudharabah:"Mudharabah",musyarakah:"Musyarakah"}[v]||v);
+function pesan(tipe,teks){const el=document.getElementById("pesan");el.className=tipe;el.textContent=teks;}
+function node(tag,txt){const e=document.createElement(tag);e.textContent=txt??"";return e;}
+async function periksaAdmin(){
+ const {data,error}=await db.auth.getSession();
+ if(error||!data.session){location.replace("admin.html");return;}
+ const {data:profil,error:pe}=await db.from("profil_pengguna").select("nama,peran").eq("id",data.session.user.id).single();
+ if(pe||!profil||profil.peran!=="admin"){await db.auth.signOut();location.replace("admin.html");return;}
+ adminId=data.session.user.id;document.getElementById("namaAdmin").textContent="Admin: "+profil.nama;
+ await muatPengajuan();
+}
+async function muatPengajuan(){
+ pesan("","Memuat data pengajuan...");
+ const {data,error}=await db.from("pengajuan_pinjaman").select("id,kategori_pemohon,nama_pemohon,no_hp,tujuan,uraian_tujuan,akad_diusulkan,jumlah_diajukan,status,catatan_admin,diputuskan_pada,dibuat_pada").order("dibuat_pada",{ascending:false});
+ if(error){rows=[];pesan("error","Gagal memuat pengajuan: "+error.message);gambarTabel();return;}
+ rows=data||[];ringkasan();gambarTabel();pesan("success","Data pengajuan berhasil diperbarui.");
+}
+function ringkasan(){
+ const count=s=>rows.filter(r=>r.status===s).length;
+ document.getElementById("jumlahSemua").textContent=rows.length;
+ document.getElementById("jumlahMenunggu").textContent=count("menunggu");
+ document.getElementById("jumlahDisetujui").textContent=count("disetujui");
+ document.getElementById("jumlahDitolak").textContent=count("ditolak");
+ document.getElementById("totalNominal").textContent=rupiah(rows.reduce((a,r)=>a+Number(r.jumlah_diajukan||0),0));
+}
+function gambarTabel(){
+ const body=document.getElementById("daftar");body.replaceChildren();
+ const filter=document.getElementById("filterStatus").value;
+ const list=rows.filter(r=>filter==="semua"||r.status===filter);
+ document.getElementById("jumlahTampil").textContent=list.length+" pengajuan ditampilkan";
+ if(!list.length){const tr=node("tr");const td=node("td","Belum ada pengajuan pada filter ini.");td.colSpan=8;tr.append(td);body.append(tr);return;}
+ for(const r of list){
+  const tr=document.createElement("tr");
+  const tdT=node("td",tanggal(r.dibuat_pada));tr.append(tdT);
+  const tdP=document.createElement("td");tdP.append(node("strong",r.nama_pemohon),node("br"),node("span",r.no_hp||"Nomor HP tidak dicantumkan"));tr.append(tdP);
+  tr.append(node("td",labelKategori(r.kategori_pemohon)));
+  const tdA=document.createElement("td");tdA.append(node("strong",labelTujuan(r.tujuan)),node("br"),node("span",labelAkad(r.akad_diusulkan)));tr.append(tdA);
+  tr.append(node("td",rupiah(r.jumlah_diajukan)));
+  const tdS=document.createElement("td");const pill=node("span",r.status.toUpperCase());pill.className="pill"+(r.status==="disetujui"?" ok":r.status==="ditolak"?" no":"");tdS.append(pill);tr.append(tdS);
+  const tdU=document.createElement("td");const d=node("div","Uraian: "+r.uraian_tujuan);d.className="detail";tdU.append(d);if(r.catatan_admin){const c=node("div","Catatan Admin: "+r.catatan_admin);c.className="detail";tdU.append(c);}tr.append(tdU);
+  const tdX=document.createElement("td");
+  if(r.status==="menunggu"){
+   const box=document.createElement("div");box.className="actions";
+   const yes=node("button","SETUJUI");yes.className="btn";yes.addEventListener("click",()=>putuskan(r,"disetujui",yes));
+   const no=node("button","TOLAK");no.className="btn-danger";no.addEventListener("click",()=>putuskan(r,"ditolak",no));
+   box.append(yes,no);tdX.append(box);
+  }else{tdX.append(node("span","Keputusan: "+tanggal(r.diputuskan_pada)));}
+  tr.append(tdX);body.append(tr);
+ }
+}
+async function putuskan(r,status,tombol){
+ const kata=status==="disetujui"?"menyetujui":"menolak";
+ if(!confirm("Apakah Admin yakin "+kata+" pengajuan "+r.nama_pemohon+" sebesar "+rupiah(r.jumlah_diajukan)+"?"))return;
+ let catatan=prompt("Catatan Admin (wajib untuk penolakan):",r.catatan_admin||"");
+ if(catatan===null)return;
+ catatan=catatan.trim();
+ if(status==="ditolak"&&!catatan){alert("Catatan alasan penolakan wajib diisi.");return;}
+ tombol.disabled=true;
+ const {error}=await db.from("pengajuan_pinjaman").update({
+  status,
+  catatan_admin:catatan||null,
+  diputuskan_oleh:adminId,
+  diputuskan_pada:new Date().toISOString(),
+  diubah_pada:new Date().toISOString()
+ }).eq("id",r.id).eq("status","menunggu");
+ tombol.disabled=false;
+ if(error){pesan("error","Keputusan belum tersimpan: "+error.message);return;}
+ pesan("success","Keputusan berhasil disimpan.");await muatPengajuan();
+}
+document.getElementById("filterStatus").addEventListener("change",gambarTabel);
+document.getElementById("muatUlang").addEventListener("click",muatPengajuan);
+document.getElementById("keluar").addEventListener("click",async()=>{await db.auth.signOut();location.href="admin.html";});
+periksaAdmin();
+</script></body></html>
