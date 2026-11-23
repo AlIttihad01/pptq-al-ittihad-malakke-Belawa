@@ -137,7 +137,8 @@ function normalisasiBulanLaporan(v){
 }
 document.getElementById("formLaporan").addEventListener("submit",async e=>{
  e.preventDefault();const pengajuan_id=document.getElementById("laporanPengajuan").value,bulan=document.getElementById("laporanBulan").value,omzet=Number(document.getElementById("laporanOmzet").value),biaya=Number(document.getElementById("laporanBiaya").value);
- const periode_bulan=normalisasiBulanLaporan(bulan);\n if(!pengajuan_id||!periode_bulan||omzet<0||biaya<0){pesanLaporan("error","Lengkapi data dengan benar. Periksa pilihan bulan laporan.");return;}
+ const periode_bulan=normalisasiBulanLaporan(bulan);
+ if(!pengajuan_id||!periode_bulan||omzet<0||biaya<0){pesanLaporan("error","Lengkapi data dengan benar. Periksa pilihan bulan laporan.");return;}
  if(!confirm("Simpan laporan bulan "+new Date(periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"})+"? Pastikan omzet dan biaya sudah benar. Satu laporan per pembiayaan per bulan."))return;
  const btn=document.getElementById("simpanLaporan");btn.disabled=true;
  const {error}=await db.from("laporan_keuntungan_musyarakah").insert({pengajuan_id,periode_bulan,omzet,biaya_usaha:biaya,catatan:document.getElementById("laporanCatatan").value.trim()||null,dicatat_oleh:adminId});
