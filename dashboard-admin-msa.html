@@ -31,6 +31,14 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
 #laporanCetakArea .report-heading{text-align:center;margin-bottom:18px}
 #laporanCetakArea .report-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 @media print{
+ body.printing-terpadu *{visibility:hidden!important}
+ body.printing-terpadu #laporanTerpaduCetak,body.printing-terpadu #laporanTerpaduCetak *{visibility:visible!important}
+ body.printing-terpadu #laporanTerpaduCetak{position:absolute;left:0;top:0;width:100%;margin:0;padding:12mm;background:white;color:#111827}
+ body.printing-terpadu #laporanTerpaduCetak table{width:100%;border-collapse:collapse;margin:10px 0 18px;font-size:10pt}
+ body.printing-terpadu #laporanTerpaduCetak th,body.printing-terpadu #laporanTerpaduCetak td{border:1px solid #cbd5e1;padding:7px;text-align:left}
+ body.printing-terpadu #laporanTerpaduCetak th{background:#ecfdf5;color:#065f46}
+ body.printing-terpadu #laporanTerpaduCetak .report-heading{text-align:center;margin-bottom:18px}
+ body.printing-terpadu #laporanTerpaduCetak .report-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
  body.printing-murabahah *{visibility:hidden!important}
  body.printing-murabahah #laporanMurabahahCetak,body.printing-murabahah #laporanMurabahahCetak *{visibility:visible!important}
  body.printing-murabahah #laporanMurabahahCetak{position:absolute;left:0;top:0;width:100%;margin:0;padding:12mm;background:white;color:#111827}
@@ -109,6 +117,17 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
   </div>
   <p id="pesanLaporanMurabahah" role="status" aria-live="polite"></p>
   <div id="laporanMurabahahCetak"><p class="muted">Pilih periode lalu tekan Buat Laporan / Simpan PDF.</p></div>
+ </section>
+<section class="card" id="cardLaporanTerpadu">
+  <h3>Laporan Keuangan Terpadu MSA Islamic Bank</h3>
+  <p class="muted">Gabungan ringkasan Murabahah dan Musyarakah berdasarkan periode. Penerimaan kas, hak keuntungan, dan piutang ditampilkan terpisah.</p>
+  <div class="filters">
+   <label for="bulanLaporanTerpadu"><strong>Periode laporan:</strong></label>
+   <input id="bulanLaporanTerpadu" type="month" style="font:inherit;padding:10px;border:1px solid #cbd5e1;border-radius:7px">
+   <button class="btn" id="tombolLaporanTerpadu" type="button">BUAT LAPORAN / SIMPAN PDF</button>
+  </div>
+  <p id="pesanLaporanTerpadu" role="status" aria-live="polite"></p>
+  <div id="laporanTerpaduCetak"><p class="muted">Pilih periode lalu tekan Buat Laporan / Simpan PDF.</p></div>
  </section>
 <section class="card">
   <h3>Laporan Keuntungan Bulanan Musyarakah</h3>
@@ -400,6 +419,67 @@ async function buatLaporanMurabahah(){
  setTimeout(()=>document.body.classList.remove("printing-murabahah"),1200);
 }
 document.getElementById("tombolLaporanMurabahah").addEventListener("click",buatLaporanMurabahah);
+
+async function buatLaporanTerpadu(){
+ const period=document.getElementById("bulanLaporanTerpadu").value;
+ const area=document.getElementById("laporanTerpaduCetak");
+ const msg=document.getElementById("pesanLaporanTerpadu");
+ if(!/^\\d{4}-\\d{2}$/.test(period)){msg.className="error";msg.textContent="Pilih bulan laporan terlebih dahulu.";return;}
+ msg.className="muted";msg.textContent="Menyiapkan laporan terpadu...";
+ const start=period+"-01";
+ const [finRes,schedRes,payRes,musyRes]=await Promise.all([
+  db.from("pembiayaan_murabahah").select("id,pengajuan_id,nama_barang,tanggal_pembelian,harga_perolehan,harga_jual").order("tanggal_pembelian"),
+  db.from("jadwal_angsuran_murabahah").select("id,pembiayaan_id,nomor_angsuran,jumlah_tagihan"),
+  db.from("pembayaran_angsuran_murabahah").select("jadwal_id,jumlah_dibayar,tanggal_bayar,metode_pembayaran"),
+  db.from("laporan_keuntungan_musyarakah").select("id,pengajuan_id,periode_bulan,omzet,biaya_usaha,keuntungan_bersih,bagian_msa,bagian_pengelola,bagian_operasional,bagian_admin").eq("periode_bulan",start).order("dibuat_pada")
+ ]);
+ const failed=[finRes,schedRes,payRes,musyRes].find(x=>x.error);
+ if(failed){msg.className="error";msg.textContent="Gagal memuat laporan: "+failed.error.message;return;}
+ const finances=finRes.data||[],schedules=schedRes.data||[],payments=payRes.data||[],reports=musyRes.data||[];
+ const scheduleMap=new Map(schedules.map(x=>[x.id,x]));
+ const paymentMonth=payments.filter(x=>String(x.tanggal_bayar||"").slice(0,7)===period);
+ const receivedMonth=paymentMonth.reduce((a,x)=>a+Number(x.jumlah_dibayar||0),0);
+ const paidAll=payments.reduce((a,x)=>a+Number(x.jumlah_dibayar||0),0);
+ const purchaseMonth=finances.filter(x=>String(x.tanggal_pembelian||"").slice(0,7)===period);
+ const purchaseCost=purchaseMonth.reduce((a,x)=>a+Number(x.harga_perolehan||0),0);
+ const purchaseMargin=purchaseMonth.reduce((a,x)=>a+Number(x.harga_jual||0)-Number(x.harga_perolehan||0),0);
+ const totalSale=finances.reduce((a,x)=>a+Number(x.harga_jual||0),0);
+ const receivable=Math.max(0,totalSale-paidAll);
+ const allIds=[...new Set(finances.map(x=>x.pengajuan_id).concat(reports.map(x=>x.pengajuan_id)))];
+ const reportIds=reports.map(x=>x.id);
+ const [appsRes,musyPayRes]=await Promise.all([
+  allIds.length?db.from("pengajuan_pinjaman").select("id,nama_pemohon").in("id",allIds):Promise.resolve({data:[],error:null}),
+  reportIds.length?db.from("pembayaran_bagi_hasil_musyarakah").select("laporan_id,penerima,jumlah_dibayar,tanggal_bayar,metode_pembayaran").in("laporan_id",reportIds):Promise.resolve({data:[],error:null})
+ ]);
+ if(appsRes.error||musyPayRes.error){msg.className="error";msg.textContent="Gagal memuat rincian nasabah/pembayaran: "+(appsRes.error?.message||musyPayRes.error?.message);return;}
+ const appMap=Object.fromEntries((appsRes.data||[]).map(x=>[x.id,x.nama_pemohon]));
+ const musyPays=musyPayRes.data||[];
+ const sum=(key)=>reports.reduce((a,x)=>a+Number(x[key]||0),0);
+ const totalProfit=sum("keuntungan_bersih"),totalRights=["bagian_msa","bagian_pengelola","bagian_operasional","bagian_admin"].reduce((a,k)=>a+sum(k),0);
+ const totalMusyPaid=musyPays.reduce((a,x)=>a+Number(x.jumlah_dibayar||0),0);
+ const msaRight=sum("bagian_msa"),msaPaid=musyPays.filter(x=>x.penerima==="msa").reduce((a,x)=>a+Number(x.jumlah_dibayar||0),0);
+ const fmtMonth=new Date(start+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"});
+ area.replaceChildren();
+ const heading=node("div");heading.className="report-heading";heading.append(node("h2","MSA ISLAMIC BANK"),node("h3","LAPORAN KEUANGAN TERPADU"));area.append(heading);
+ const meta=node("div");meta.className="report-meta";meta.append(node("p","Periode: "+fmtMonth),node("p","Dicetak: "+new Date().toLocaleString("id-ID")));area.append(meta);
+ area.append(node("h3","A. RINGKASAN MURABAHAH"));
+ const mt=document.createElement("table"),mb=document.createElement("tbody");tambahBarisLaporan(mb,["Keterangan","Jumlah"],true);
+ [["Pembelian barang pada bulan ini",String(purchaseMonth.length)+" transaksi"],["Harga perolehan pembelian bulan ini",rupiah(purchaseCost)],["Margin kontrak dari pembelian bulan ini",rupiah(purchaseMargin)],["Angsuran diterima pada bulan ini",rupiah(receivedMonth)],["Total piutang Murabahah tersisa saat laporan dibuat",rupiah(receivable)]].forEach(x=>tambahBarisLaporan(mb,x));mt.append(mb);area.append(mt);
+ area.append(node("h3","B. RINGKASAN MUSYARAKAH"));
+ const yt=document.createElement("table"),yb=document.createElement("tbody");tambahBarisLaporan(yb,["Keterangan","Jumlah"],true);
+ [["Jumlah laporan usaha bulan ini",String(reports.length)+" laporan"],["Total omzet usaha",rupiah(sum("omzet"))],["Total biaya usaha",rupiah(sum("biaya_usaha"))],["Total keuntungan bersih",rupiah(totalProfit)],["Total hak bagi hasil seluruh penerima",rupiah(totalRights)],["Bagi hasil sudah dibayar",rupiah(totalMusyPaid)],["Bagi hasil belum dibayar",rupiah(Math.max(0,totalRights-totalMusyPaid))],["Hak MSA",rupiah(msaRight)],["Bagian MSA sudah dibayar",rupiah(msaPaid)],["Sisa hak MSA belum dibayar",rupiah(Math.max(0,msaRight-msaPaid))]].forEach(x=>tambahBarisLaporan(yb,x));yt.append(yb);area.append(yt);
+ area.append(node("h3","C. RINCIAN LAPORAN MUSYARAKAH"));
+ const rt=document.createElement("table"),rb=document.createElement("tbody");tambahBarisLaporan(rb,["Nasabah","Omzet","Biaya","Laba Bersih","Hak MSA","Dibayar ke MSA"],true);
+ reports.forEach(r=>{const paid=musyPays.filter(p=>p.laporan_id===r.id&&p.penerima==="msa").reduce((a,p)=>a+Number(p.jumlah_dibayar||0),0);tambahBarisLaporan(rb,[appMap[r.pengajuan_id]||"Nasabah",rupiah(r.omzet),rupiah(r.biaya_usaha),rupiah(r.keuntungan_bersih),rupiah(r.bagian_msa),rupiah(paid)]);});
+ if(!reports.length)tambahBarisLaporan(rb,["Belum ada laporan Musyarakah untuk bulan ini","","","","",""]);rt.append(rb);area.append(rt);
+ area.append(node("h3","D. CATATAN PENTING"));
+ const note=node("p","Laporan ini belum menghitung biaya operasional umum dan saldo kas/bank. Data biaya usaha Musyarakah hanya berasal dari laporan usaha yang dicatat. Penerimaan Murabahah adalah angsuran yang tercatat pada bulan laporan; piutang adalah sisa harga jual dikurangi seluruh angsuran tercatat. Hak bagi hasil Musyarakah bukan otomatis kas masuk MSA.");note.className="muted";area.append(note);
+ msg.className="success";msg.textContent="Laporan terpadu berhasil dibuat. Pilih Save as PDF pada dialog cetak.";
+ document.body.classList.add("printing-terpadu");window.print();
+ setTimeout(()=>document.body.classList.remove("printing-terpadu"),1200);
+}
+document.getElementById("tombolLaporanTerpadu").addEventListener("click",buatLaporanTerpadu);
+document.getElementById("bulanLaporanTerpadu").value=new Date().toISOString().slice(0,7);
 
 async function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
