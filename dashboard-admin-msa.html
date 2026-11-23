@@ -22,6 +22,7 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
 .actions{display:flex;gap:6px;flex-wrap:wrap}.detail{max-width:320px;white-space:normal;overflow-wrap:anywhere;color:#475569;font-size:13px}
 #pesan{margin:10px 0}.error{color:#b91c1c}.success{color:#166534}.muted{color:#64748b}
 @media(max-width:600px){header h1{font-size:20px}.topbar{align-items:flex-start}}
+.report-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.report-form label{display:flex;flex-direction:column;gap:5px;font-weight:600}.report-form input,.report-form select,.report-form textarea{font:inherit;padding:10px;border:1px solid #cbd5e1;border-radius:7px;background:white;width:100%}.report-form .full{grid-column:1/-1}.share-preview{margin:14px 0;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px}
 </style>
 </head>
 <body>
@@ -51,6 +52,23 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
   </table></div>
  </section>
  <section class="card">
+  <h3>Laporan Keuntungan Bulanan Musyarakah</h3>
+  <p class="muted">Laporan dicatat oleh Admin MSA. Masukkan omzet dan biaya usaha bulan berjalan. Pembagian dihitung dari keuntungan bersih.</p>
+  <form id="formLaporan" class="report-form">
+   <label>Pengajuan Musyarakah yang sudah dicairkan<select id="laporanPengajuan" required><option value="">Memuat pembiayaan...</option></select></label>
+   <label>Bulan laporan<input id="laporanBulan" type="month" required></label>
+   <label>Omzet usaha (Rp)<input id="laporanOmzet" type="number" min="0" step="0.01" required placeholder="Contoh: 5000000"></label>
+   <label>Biaya usaha (Rp)<input id="laporanBiaya" type="number" min="0" step="0.01" required placeholder="Contoh: 3000000"></label>
+   <label class="full">Catatan (opsional)<textarea id="laporanCatatan" rows="2"></textarea></label>
+   <div class="full"><button class="btn" id="simpanLaporan" type="submit">SIMPAN LAPORAN BULANAN</button></div>
+  </form>
+  <div id="pratinjauBagiHasil" class="share-preview muted">Masukkan omzet dan biaya untuk melihat simulasi pembagian.</div>
+  <p id="pesanLaporan" role="status" aria-live="polite"></p>
+  <h4>Riwayat Laporan Bulanan</h4>
+  <div class="table-wrap"><table><thead><tr><th>Periode</th><th>Usaha / Pemohon</th><th>Omzet</th><th>Biaya</th><th>Keuntungan Bersih</th><th>MSA 70%</th><th>Pengelola 10%</th><th>Operasional 15%</th><th>Admin 5%</th></tr></thead><tbody id="riwayatLaporan"><tr><td colspan="9">Memuat laporan...</td></tr></tbody></table></div>
+ </section>
+ 
+ <section class="card">
   <div class="filters">
    <label for="filterStatus"><strong>Filter status:</strong></label>
    <select id="filterStatus"><option value="semua">Semua status</option><option value="menunggu">Menunggu</option><option value="disetujui">Disetujui</option><option value="ditolak">Ditolak</option><option value="dibatalkan">Dibatalkan</option></select>
@@ -75,6 +93,42 @@ const labelTujuan=v=>({pribadi_keluarga:"Pribadi / keluarga",modal_usaha:"Modal 
 const labelAkad=v=>({qardh_hasan:"Qardh Hasan",mudharabah:"Mudharabah",musyarakah:"Musyarakah"}[v]||v);
 function pesan(tipe,teks){const el=document.getElementById("pesan");el.className=tipe;el.textContent=teks;}
 function node(tag,txt){const e=document.createElement(tag);e.textContent=txt??"";return e;}
+const laporanRupiah=n=>rupiah(n);
+function pesanLaporan(t,e){const x=document.getElementById("pesanLaporan");x.className=t;x.textContent=e;}
+async function muatPilihanLaporan(){
+ const s=document.getElementById("laporanPengajuan");
+ const [a,c]=await Promise.all([db.from("pengajuan_pinjaman").select("id,nama_pemohon,jumlah_diajukan").eq("status","disetujui").eq("akad_diusulkan","musyarakah"),db.from("pencairan_pembiayaan").select("pengajuan_id")]);
+ if(a.error||c.error){s.innerHTML='<option value="">Gagal memuat data</option>';pesanLaporan("error",a.error?.message||c.error?.message);return;}
+ const paid=new Set((c.data||[]).map(x=>x.pengajuan_id));s.replaceChildren();const first=node("option","Pilih pembiayaan Musyarakah");first.value="";s.append(first);
+ (a.data||[]).filter(x=>paid.has(x.id)).forEach(x=>{const o=node("option",x.nama_pemohon+" • "+rupiah(x.jumlah_diajukan));o.value=x.id;s.append(o);});
+ if(s.options.length===1)s.options[0].textContent="Belum ada pembiayaan Musyarakah yang dicairkan";
+}
+function pratinjauLaporan(){
+ const om=Number(document.getElementById("laporanOmzet").value||0),bi=Number(document.getElementById("laporanBiaya").value||0),l=om-bi,e=document.getElementById("pratinjauBagiHasil");
+ if(!om&&!bi){e.textContent="Masukkan omzet dan biaya untuk melihat simulasi pembagian.";return;}
+ if(l<0){e.textContent="Usaha mengalami kerugian "+rupiah(-l)+". Tidak ada pembagian keuntungan.";return;}
+ const m=Math.round(l*.70*100)/100,p=Math.round(l*.10*100)/100,o=Math.round(l*.15*100)/100,a=l-m-p-o;e.replaceChildren(node("strong","Keuntungan bersih: "+rupiah(l)));
+ [["MSA Islamic Bank 70%",m],["Pengelola usaha 10%",p],["Operasional 15%",o],["Admin 5%",a]].forEach(([k,v])=>{const d=node("div",k+": "+rupiah(v));e.append(d);});
+}
+async function muatRiwayatLaporan(){
+ const b=document.getElementById("riwayatLaporan");
+ const {data,error}=await db.from("laporan_keuntungan_musyarakah").select("id,pengajuan_id,periode_bulan,omzet,biaya_usaha,keuntungan_bersih,bagian_msa,bagian_pengelola,bagian_operasional,bagian_admin").order("periode_bulan",{ascending:false});
+ b.replaceChildren();if(error){const tr=node("tr");const td=node("td","Gagal memuat laporan: "+error.message);td.colSpan=9;tr.append(td);b.append(tr);return;}
+ const ids=[...new Set((data||[]).map(x=>x.pengajuan_id))];let names={};if(ids.length){const q=await db.from("pengajuan_pinjaman").select("id,nama_pemohon").in("id",ids);(q.data||[]).forEach(x=>names[x.id]=x.nama_pemohon);}
+ if(!data?.length){const tr=node("tr");const td=node("td","Belum ada laporan keuntungan bulanan.");td.colSpan=9;tr.append(td);b.append(tr);return;}
+ data.forEach(x=>{const tr=node("tr");const vals=[new Date(x.periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"}),names[x.pengajuan_id]||"-",rupiah(x.omzet),rupiah(x.biaya_usaha),rupiah(x.keuntungan_bersih),rupiah(x.bagian_msa),rupiah(x.bagian_pengelola),rupiah(x.bagian_operasional),rupiah(x.bagian_admin)];vals.forEach(v=>tr.append(node("td",v)));b.append(tr);});
+}
+document.getElementById("formLaporan").addEventListener("submit",async e=>{
+ e.preventDefault();const pengajuan_id=document.getElementById("laporanPengajuan").value,bulan=document.getElementById("laporanBulan").value,omzet=Number(document.getElementById("laporanOmzet").value),biaya=Number(document.getElementById("laporanBiaya").value);
+ if(!pengajuan_id||!bulan||omzet<0||biaya<0){pesanLaporan("error","Lengkapi data dengan benar.");return;}
+ if(!confirm("Simpan laporan bulan "+bulan+"? Pastikan omzet dan biaya sudah benar. Satu laporan per pembiayaan per bulan."))return;
+ const btn=document.getElementById("simpanLaporan");btn.disabled=true;
+ const {error}=await db.from("laporan_keuntungan_musyarakah").insert({pengajuan_id,periode_bulan:bulan+"-01",omzet,biaya_usaha:biaya,catatan:document.getElementById("laporanCatatan").value.trim()||null,dicatat_oleh:adminId});
+ btn.disabled=false;if(error){pesanLaporan("error","Gagal menyimpan: "+error.message);return;}
+ pesanLaporan("success","Laporan bulanan berhasil disimpan.");e.target.reset();pratinjauLaporan();await muatRiwayatLaporan();
+});
+document.getElementById("laporanOmzet").addEventListener("input",pratinjauLaporan);document.getElementById("laporanBiaya").addEventListener("input",pratinjauLaporan);
+
 async function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
  if(error||!data.session){location.replace("admin.html");return;}
@@ -83,6 +137,8 @@ async function periksaAdmin(){
  adminId=data.session.user.id;document.getElementById("namaAdmin").textContent="Admin: "+profil.nama;
  await muatPengajuan();
  await muatDaftarPencairan();
+ await muatPilihanLaporan();
+ await muatRiwayatLaporan();
 }
 async function muatPengajuan(){
  pesan("","Memuat data pengajuan...");
