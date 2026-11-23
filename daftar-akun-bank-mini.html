@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Daftar Akun Bank Mini Al-Ittihad</title>
+<title>Daftar Akun MSA Islamic Bank</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f1f5f9;color:#1e293b}
 header{background:#075333;color:white;text-align:center;padding:22px 15px}
@@ -19,7 +19,7 @@ a{color:#08734b}small{color:#64748b}
 </head>
 <body>
 <header>
-<h2 style="color:white;margin:0">BANK MINI AL-ITTIHAD</h2>
+<h2 style="color:white;margin:0">MSA ISLAMIC BANK</h2>
 <div>PPTQ Al-Ittihad Malakke Belawa</div>
 </header>
 <main>
@@ -40,7 +40,7 @@ a{color:#08734b}small{color:#64748b}
 <button id="tombol" type="submit">BUAT AKUN</button>
 </form>
 <p id="pesan" role="status" aria-live="polite"></p>
-<p>Sudah punya akun? <a href="login-bank-mini.html">Login Bank Mini</a></p>
+<p>Sudah punya akun? <a href="login-bank-mini.html">Login MSA Islamic Bank</a></p>
 <p><a href="index.html">Kembali ke website pesantren</a></p>
 </div>
 </main>
@@ -89,7 +89,7 @@ form.addEventListener("submit", async (e) => {
   form.reset();
   pesan.className = "success";
   if (data.session) {
-    pesan.textContent = "Akun berhasil dibuat. Silakan masuk melalui halaman Login Bank Mini.";
+    pesan.textContent = "Akun berhasil dibuat. Silakan masuk melalui halaman Login MSA Islamic Bank.";
     await supabaseClient.auth.signOut();
   } else {
     pesan.textContent = "Pendaftaran berhasil. Silakan periksa email untuk konfirmasi akun. Setelah konfirmasi, Anda dapat langsung login tanpa menunggu persetujuan Admin.";
