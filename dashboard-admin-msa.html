@@ -68,7 +68,27 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
    <tbody id="daftarPencairan"><tr><td colspan="7">Memuat data pencairan...</td></tr></tbody>
   </table></div>
  </section>
+ 
  <section class="card">
+  <h3>Pembiayaan Murabahah — Pembelian Barang dan Tagihan</h3>
+  <p class="muted">Catat pembelian barang dari pemasok setelah MSA memiliki barang tersebut. Setelah diserahkan kepada nasabah, sistem membuat 12 tagihan otomatis, jatuh tempo setiap tanggal 16.</p>
+  <form id="formMurabahah" class="report-form">
+   <label>Nasabah dengan akad Murabahah<select id="murabahahPengajuan" required><option value="">Memuat pengajuan...</option></select></label>
+   <label>Nama barang<input id="murabahahBarang" maxlength="250" required></label>
+   <label>Spesifikasi barang<input id="murabahahSpesifikasi" maxlength="1000"></label>
+   <label>Nama pemasok / toko<input id="murabahahPemasok" maxlength="200" required></label>
+   <label>Tanggal MSA membeli barang<input id="murabahahTanggalBeli" type="date" required></label>
+   <label>Harga perolehan barang (Rp)<input id="murabahahHarga" type="number" min="1" step="0.01" required></label>
+   <label>Margin keuntungan<input value="20% (ditetapkan)" disabled></label>
+   <label>Tanggal barang diserahkan kepada nasabah<input id="murabahahTanggalSerah" type="date" required></label>
+   <div class="full share-preview" id="murabahahPratinjau">Masukkan harga perolehan untuk melihat harga jual dan angsuran.</div>
+   <div class="full"><button class="btn" id="simpanMurabahah" type="submit">SIMPAN PEMBELIAN & BUAT 12 TAGIHAN</button></div>
+  </form>
+  <p id="pesanMurabahah" role="status" aria-live="polite"></p>
+  <h4>Tagihan dan Pembayaran Angsuran Murabahah</h4>
+  <div class="table-wrap"><table><thead><tr><th>Nasabah / Barang</th><th>Angsuran</th><th>Jatuh tempo</th><th>Tagihan</th><th>Dibayar</th><th>Sisa</th><th>Status</th><th>Tindakan</th></tr></thead><tbody id="daftarAngsuranMurabahah"><tr><td colspan="8">Memuat tagihan...</td></tr></tbody></table></div>
+ </section>
+<section class="card">
   <h3>Laporan Keuntungan Bulanan Musyarakah</h3>
   <p class="muted">Laporan dicatat oleh Admin MSA. Masukkan omzet dan biaya usaha bulan berjalan. Pembagian dihitung dari keuntungan bersih.</p>
   <form id="formLaporan" class="report-form">
@@ -254,6 +274,42 @@ async function cetakLaporanBulanan(){
 }
 document.getElementById("tombolCetakLaporan").addEventListener("click",cetakLaporanBulanan);
 
+
+function pesanMurabahah(t,e){const x=document.getElementById("pesanMurabahah");x.className=t;x.textContent=e;}
+async function muatPilihanMurabahah(){
+ const s=document.getElementById("murabahahPengajuan");
+ const [a,b]=await Promise.all([db.from("pengajuan_pinjaman").select("id,nama_pemohon,jumlah_diajukan").eq("status","disetujui").eq("akad_disetujui","murabahah"),db.from("pembiayaan_murabahah").select("pengajuan_id")]);
+ if(a.error||b.error){s.innerHTML='<option value="">Gagal memuat</option>';pesanMurabahah("error",a.error?.message||b.error?.message);return;}
+ const used=new Set((b.data||[]).map(x=>x.pengajuan_id));s.replaceChildren();const first=node("option","Pilih nasabah Murabahah");first.value="";s.append(first);
+ (a.data||[]).filter(x=>!used.has(x.id)).forEach(x=>{const o=node("option",x.nama_pemohon+" • Pengajuan "+rupiah(x.jumlah_diajukan));o.value=x.id;s.append(o);});
+ if(s.options.length===1)s.options[0].textContent="Belum ada pengajuan Murabahah yang disetujui Admin";
+}
+function pratinjauMurabahah(){const h=Number(document.getElementById("murabahahHarga").value||0),jual=h*1.2,angs=Math.floor(jual/12*100)/100;document.getElementById("murabahahPratinjau").textContent=h>0?"Harga perolehan: "+rupiah(h)+" • Margin 20%: "+rupiah(h*.2)+" • Harga jual: "+rupiah(jual)+" • Angsuran 1–11: "+rupiah(angs)+" • Angsuran ke-12 disesuaikan.":"Masukkan harga perolehan untuk melihat harga jual dan angsuran.";}
+document.getElementById("murabahahHarga").addEventListener("input",pratinjauMurabahah);
+document.getElementById("formMurabahah").addEventListener("submit",async e=>{
+ e.preventDefault();const pengajuan_id=document.getElementById("murabahahPengajuan").value,harga_perolehan=Number(document.getElementById("murabahahHarga").value),tanggal_pembelian=document.getElementById("murabahahTanggalBeli").value,tanggal_serah_terima=document.getElementById("murabahahTanggalSerah").value;
+ if(!pengajuan_id||harga_perolehan<=0||!tanggal_pembelian||!tanggal_serah_terima){pesanMurabahah("error","Lengkapi data wajib.");return;}
+ if(tanggal_serah_terima<tanggal_pembelian){pesanMurabahah("error","Tanggal serah terima tidak boleh sebelum tanggal pembelian.");return;}
+ if(!confirm("Pastikan barang benar-benar sudah dibeli dan dimiliki MSA sebelum dijual kepada nasabah. Harga jual "+rupiah(harga_perolehan*1.2)+". Buat 12 tagihan mulai tanggal 16 bulan setelah serah terima?"))return;
+ const btn=document.getElementById("simpanMurabahah");btn.disabled=true;
+ const {error}=await db.from("pembiayaan_murabahah").insert({pengajuan_id,nama_barang:document.getElementById("murabahahBarang").value.trim(),spesifikasi_barang:document.getElementById("murabahahSpesifikasi").value.trim()||null,nama_pemasok:document.getElementById("murabahahPemasok").value.trim(),tanggal_pembelian,harga_perolehan,tanggal_serah_terima,dibuat_oleh:adminId});
+ btn.disabled=false;if(error){pesanMurabahah("error","Gagal menyimpan: "+error.message);return;}
+ pesanMurabahah("success","Data pembelian tersimpan dan 12 jadwal angsuran berhasil dibuat.");e.target.reset();pratinjauMurabahah();await muatPilihanMurabahah();await muatDaftarAngsuranMurabahah();
+});
+async function muatDaftarAngsuranMurabahah(){
+ const body=document.getElementById("daftarAngsuranMurabahah"),[f,s,p]=await Promise.all([db.from("pembiayaan_murabahah").select("id,pengajuan_id,nama_barang"),db.from("jadwal_angsuran_murabahah").select("id,pembiayaan_id,nomor_angsuran,tanggal_jatuh_tempo,jumlah_tagihan").order("tanggal_jatuh_tempo"),db.from("pembayaran_angsuran_murabahah").select("jadwal_id,jumlah_dibayar")]);
+ body.replaceChildren();if(f.error||s.error||p.error){const tr=node("tr"),td=node("td","Gagal memuat tagihan: "+(f.error?.message||s.error?.message||p.error?.message));td.colSpan=8;tr.append(td);body.append(tr);return;}
+ const ids=[...new Set((f.data||[]).map(x=>x.pengajuan_id))];let names={};if(ids.length){const q=await db.from("pengajuan_pinjaman").select("id,nama_pemohon").in("id",ids);(q.data||[]).forEach(x=>names[x.id]=x.nama_pemohon);}
+ const fm=new Map((f.data||[]).map(x=>[x.id,x]));if(!s.data?.length){const tr=node("tr"),td=node("td","Belum ada jadwal angsuran Murabahah.");td.colSpan=8;tr.append(td);body.append(tr);return;}
+ for(const row of s.data){const fin=fm.get(row.pembiayaan_id);if(!fin)continue;const paid=(p.data||[]).filter(x=>x.jadwal_id===row.id).reduce((a,x)=>a+Number(x.jumlah_dibayar||0),0),remaining=Math.max(0,Number(row.jumlah_tagihan)-paid),tr=node("tr");tr.append(node("td",(names[fin.pengajuan_id]||"Nasabah")+" • "+fin.nama_barang),node("td",row.nomor_angsuran+" / 12"),node("td",new Date(row.tanggal_jatuh_tempo+"T00:00:00").toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"})),node("td",rupiah(row.jumlah_tagihan)),node("td",rupiah(paid)),node("td",rupiah(remaining)));const status=remaining===0?"LUNAS":new Date(row.tanggal_jatuh_tempo+"T23:59:59")<new Date()?"TERLAMBAT":paid>0?"SEBAGIAN":"BELUM BAYAR",tds=node("td"),pill=node("span",status);pill.className="pill"+(status==="LUNAS"?" ok":status==="TERLAMBAT"?" no":"");tds.append(pill);tr.append(tds);const action=node("td");if(remaining>0){const btn=node("button","CATAT BAYAR");btn.className="btn";btn.addEventListener("click",()=>catatBayarAngsuran(row,remaining,btn));action.append(btn);}else action.textContent="Selesai";tr.append(action);body.append(tr);}
+}
+async function catatBayarAngsuran(row,sisa,btn){
+ const raw=prompt("Sisa tagihan: "+rupiah(sisa)+"\nMasukkan jumlah yang benar-benar diterima:");if(raw===null)return;const jumlah_dibayar=Number(raw);if(!Number.isFinite(jumlah_dibayar)||jumlah_dibayar<=0||jumlah_dibayar>sisa){alert("Jumlah pembayaran tidak valid atau melebihi sisa tagihan.");return;}
+ const m=prompt("Metode pembayaran:\n1 = Tunai\n2 = Transfer","1");if(m===null)return;const metode_pembayaran=m.trim()==="1"?"tunai":m.trim()==="2"?"transfer":null;if(!metode_pembayaran){alert("Metode tidak valid.");return;}
+ let bank_tujuan=null,nama_pemilik_rekening=null,nomor_referensi=null;if(metode_pembayaran==="transfer"){bank_tujuan=prompt("Nama bank:");if(bank_tujuan===null)return;nama_pemilik_rekening=prompt("Nama pemilik rekening:");if(nama_pemilik_rekening===null)return;nomor_referensi=prompt("Nomor referensi transfer:");if(nomor_referensi===null)return;if(!bank_tujuan.trim()||!nama_pemilik_rekening.trim()||!nomor_referensi.trim()){alert("Lengkapi data transfer.");return;}}
+ btn.disabled=true;const {error}=await db.from("pembayaran_angsuran_murabahah").insert({jadwal_id:row.id,jumlah_dibayar,metode_pembayaran,bank_tujuan,nama_pemilik_rekening,nomor_referensi,dibayar_oleh:adminId});btn.disabled=false;if(error){pesanMurabahah("error","Pembayaran gagal dicatat: "+error.message);return;}pesanMurabahah("success","Pembayaran angsuran berhasil dicatat.");await muatDaftarAngsuranMurabahah();
+}
+
 async function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
  if(error||!data.session){location.replace("admin.html");return;}
@@ -262,6 +318,8 @@ async function periksaAdmin(){
  adminId=data.session.user.id;document.getElementById("namaAdmin").textContent="Admin: "+profil.nama;
  await muatPengajuan();
  await muatDaftarPencairan();
+ await muatPilihanMurabahah();
+ await muatDaftarAngsuranMurabahah();
  await muatPilihanLaporan();
  await muatRiwayatLaporan();
  await muatPilihanBayar();
