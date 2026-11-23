@@ -124,7 +124,7 @@ const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",m
 const tanggal=v=>v?new Date(v).toLocaleString("id-ID",{dateStyle:"medium",timeStyle:"short"}):"-";
 const labelKategori=v=>({orang_tua:"Orang tua santri",pengurus:"Pengurus",guru:"Guru",masyarakat_umum:"Masyarakat umum"}[v]||v);
 const labelTujuan=v=>({pribadi_keluarga:"Pribadi / keluarga",modal_usaha:"Modal usaha",pendidikan:"Pendidikan"}[v]||v);
-const labelAkad=v=>({qardh_hasan:"Qardh Hasan",mudharabah:"Mudharabah",musyarakah:"Musyarakah"}[v]||v);
+const labelAkad=v=>({qardh_hasan:"Qardh Hasan",mudharabah:"Mudharabah",musyarakah:"Musyarakah",murabahah:"Murabahah"}[v]||v);
 function pesan(tipe,teks){const el=document.getElementById("pesan");el.className=tipe;el.textContent=teks;}
 function node(tag,txt){const e=document.createElement(tag);e.textContent=txt??"";return e;}
 const laporanRupiah=n=>rupiah(n);
@@ -271,7 +271,7 @@ async function periksaAdmin(){
 }
 async function muatPengajuan(){
  pesan("","Memuat data pengajuan...");
- const {data,error}=await db.from("pengajuan_pinjaman").select("id,kategori_pemohon,nama_pemohon,no_hp,tujuan,uraian_tujuan,akad_diusulkan,jumlah_diajukan,status,catatan_admin,diputuskan_pada,dibuat_pada").order("dibuat_pada",{ascending:false});
+ const {data,error}=await db.from("pengajuan_pinjaman").select("id,kategori_pemohon,nama_pemohon,no_hp,tujuan,uraian_tujuan,akad_diusulkan,akad_disetujui,jumlah_diajukan,status,catatan_admin,diputuskan_pada,dibuat_pada").order("dibuat_pada",{ascending:false});
  if(error){rows=[];pesan("error","Gagal memuat pengajuan: "+error.message);gambarTabel();return;}
  rows=data||[];ringkasan();gambarTabel();pesan("success","Data pengajuan berhasil diperbarui.");
 }
@@ -287,7 +287,7 @@ async function muatDaftarPencairan(){
  const body=document.getElementById("daftarPencairan");
  body.replaceChildren();
  const [appsRes,payoutRes]=await Promise.all([
-  db.from("pengajuan_pinjaman").select("id,nama_pemohon,akad_diusulkan,jumlah_diajukan,status").eq("status","disetujui").order("dibuat_pada",{ascending:false}),
+  db.from("pengajuan_pinjaman").select("id,nama_pemohon,akad_diusulkan,akad_disetujui,jumlah_diajukan,status").eq("status","disetujui").order("dibuat_pada",{ascending:false}),
   db.from("pencairan_pembiayaan").select("id,pengajuan_id,metode_pencairan,jumlah_dicairkan,tanggal_pencairan,bank_tujuan,nama_pemilik_rekening,nomor_referensi,keterangan").order("tanggal_pencairan",{ascending:false})
  ]);
  const msg=document.getElementById("pesanPencairan");
@@ -302,7 +302,7 @@ async function muatDaftarPencairan(){
   const remaining=Math.max(0,amount-paid);
   const tr=document.createElement("tr");
   tr.append(node("td",app.nama_pemohon));
-  tr.append(node("td",labelAkad(app.akad_diusulkan)));
+  tr.append(node("td",labelAkad(app.akad_disetujui||app.akad_diusulkan)));
   tr.append(node("td",rupiah(amount)));
   tr.append(node("td",rupiah(paid)));
   tr.append(node("td",rupiah(remaining)));
@@ -318,7 +318,9 @@ async function muatDaftarPencairan(){
   });
   tr.append(history);
   const action=document.createElement("td");
-  if(remaining>0){
+  if((app.akad_disetujui||app.akad_diusulkan)==="murabahah"){
+   action.textContent="Proses pembelian barang Murabahah (bukan pencairan tunai).";
+  }else if(remaining>0){
    const btn=node("button","CATAT PENCAIRAN");btn.className="btn";
    btn.addEventListener("click",()=>catatPencairan(app,remaining,btn));action.append(btn);
   }else action.textContent="Sudah dicairkan penuh";
@@ -366,7 +368,7 @@ function gambarTabel(){
   const tdT=node("td",tanggal(r.dibuat_pada));tr.append(tdT);
   const tdP=document.createElement("td");tdP.append(node("strong",r.nama_pemohon),node("br"),node("span",r.no_hp||"Nomor HP tidak dicantumkan"));tr.append(tdP);
   tr.append(node("td",labelKategori(r.kategori_pemohon)));
-  const tdA=document.createElement("td");tdA.append(node("strong",labelTujuan(r.tujuan)),node("br"),node("span",labelAkad(r.akad_diusulkan)));tr.append(tdA);
+  const tdA=document.createElement("td");tdA.append(node("strong",labelTujuan(r.tujuan)),node("br"),node("span",labelAkad(r.akad_disetujui||r.akad_diusulkan)));tr.append(tdA);
   tr.append(node("td",rupiah(r.jumlah_diajukan)));
   const tdS=document.createElement("td");const pill=node("span",r.status.toUpperCase());pill.className="pill"+(r.status==="disetujui"?" ok":r.status==="ditolak"?" no":"");tdS.append(pill);tr.append(tdS);
   const tdU=document.createElement("td");const d=node("div","Uraian: "+r.uraian_tujuan);d.className="detail";tdU.append(d);if(r.catatan_admin){const c=node("div","Catatan Admin: "+r.catatan_admin);c.className="detail";tdU.append(c);}tr.append(tdU);
@@ -382,6 +384,15 @@ function gambarTabel(){
 }
 async function putuskan(r,status,tombol){
  const kata=status==="disetujui"?"menyetujui":"menolak";
+ let akadDisetujui=null;
+ if(status==="disetujui"){
+  const pilihan=prompt("Tetapkan akad untuk "+r.nama_pemohon+":\n1 = Qardh Hasan\n2 = Mudharabah\n3 = Musyarakah\n4 = Murabahah","1");
+  if(pilihan===null)return;
+  const map={"1":"qardh_hasan","2":"mudharabah","3":"musyarakah","4":"murabahah"};
+  akadDisetujui=map[pilihan.trim()];
+  if(!akadDisetujui){alert("Pilihan akad tidak valid.");return;}
+  if(akadDisetujui==="murabahah"&&!confirm("Untuk Murabahah, MSA wajib membeli dan memiliki barang dari pemasok terlebih dahulu. Dana tidak dicairkan tunai kepada nasabah. Lanjutkan?"))return;
+ }
  if(!confirm("Apakah Admin yakin "+kata+" pengajuan "+r.nama_pemohon+" sebesar "+rupiah(r.jumlah_diajukan)+"?"))return;
  let catatan=prompt("Catatan Admin (wajib untuk penolakan):",r.catatan_admin||"");
  if(catatan===null)return;
@@ -389,7 +400,7 @@ async function putuskan(r,status,tombol){
  if(status==="ditolak"&&!catatan){alert("Catatan alasan penolakan wajib diisi.");return;}
  tombol.disabled=true;
  const {error}=await db.from("pengajuan_pinjaman").update({
-  status,
+  status,akad_disetujui:akadDisetujui,
   catatan_admin:catatan||null,
   diputuskan_oleh:adminId,
   diputuskan_pada:new Date().toISOString(),
@@ -397,7 +408,7 @@ async function putuskan(r,status,tombol){
  }).eq("id",r.id).eq("status","menunggu");
  tombol.disabled=false;
  if(error){pesan("error","Keputusan belum tersimpan: "+error.message);return;}
- pesan("success","Keputusan berhasil disimpan.");await muatPengajuan();
+ pesan("success","Keputusan dan akad berhasil disimpan.");await muatPengajuan();await muatDaftarPencairan();
 }
 document.getElementById("filterStatus").addEventListener("change",gambarTabel);
 document.getElementById("muatUlang").addEventListener("click",muatPengajuan);
