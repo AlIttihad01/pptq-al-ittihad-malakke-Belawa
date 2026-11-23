@@ -183,7 +183,7 @@ document.getElementById("formBayarHasil").addEventListener("submit",async e=>{
  btn.disabled=false;if(error){pesanBayar("error","Pembayaran gagal dicatat: "+error.message);return;}pesanBayar("success","Pembayaran berhasil dicatat.");e.target.reset();metodeBayarFields();await muatRekapBayar();await muatPilihanBayar();
 });
 document.getElementById("bayarMetode").addEventListener("change",metodeBayarFields);
-\nasync function periksaAdmin(){
+async function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
  if(error||!data.session){location.replace("admin.html");return;}
  const {data:profil,error:pe}=await db.from("profil_pengguna").select("nama,peran").eq("id",data.session.user.id).single();
