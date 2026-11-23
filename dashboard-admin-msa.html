@@ -68,7 +68,16 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
   <div class="table-wrap"><table><thead><tr><th>Periode</th><th>Usaha / Pemohon</th><th>Omzet</th><th>Biaya</th><th>Keuntungan Bersih</th><th>MSA 70%</th><th>Pengelola 10%</th><th>Operasional 15%</th><th>Admin 5%</th></tr></thead><tbody id="riwayatLaporan"><tr><td colspan="9">Memuat laporan...</td></tr></tbody></table></div>
  </section>
  
- <section class="card">
+ <section class="card"><h3>Pembayaran dan Riwayat Bagi Hasil</h3><p class="muted">Catat pembayaran yang benar-benar sudah diberikan. Pembayaran dapat dicicil sampai batas hak penerima.</p>
+<form id="formBayarHasil" class="report-form">
+<label>Laporan keuntungan<select id="bayarLaporan" required><option value="">Memuat laporan...</option></select></label>
+<label>Penerima<select id="bayarPenerima" required><option value="msa">MSA Islamic Bank</option><option value="pengelola">Pengelola usaha</option><option value="operasional">Operasional</option><option value="admin">Admin</option></select></label>
+<label>Jumlah dibayarkan (Rp)<input id="bayarJumlah" type="number" min="1" step="0.01" required></label>
+<label>Metode pembayaran<select id="bayarMetode"><option value="tunai">Tunai</option><option value="transfer">Transfer</option></select></label>
+<label class="field-transfer" hidden>Bank tujuan<input id="bayarBank"></label><label class="field-transfer" hidden>Nama pemilik rekening<input id="bayarNamaRekening"></label><label class="field-transfer" hidden>Nomor referensi transfer<input id="bayarReferensi"></label>
+<label class="full">Keterangan (opsional)<textarea id="bayarCatatan" rows="2"></textarea></label><div class="full"><button class="btn" id="simpanBayarHasil" type="submit">SIMPAN PEMBAYARAN</button></div></form>
+<p id="pesanBayarHasil" role="status" aria-live="polite"></p><h4>Rekap hak dan pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Periode / Pemohon</th><th>Penerima</th><th>Hak</th><th>Sudah dibayar</th><th>Sisa</th><th>Status</th></tr></thead><tbody id="rekapBayarHasil"><tr><td colspan="6">Memuat rekap...</td></tr></tbody></table></div>
+<h4>Riwayat transaksi pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Penerima</th><th>Jumlah</th><th>Metode</th><th>Catatan</th></tr></thead><tbody id="riwayatBayarHasil"><tr><td colspan="5">Memuat riwayat...</td></tr></tbody></table></div></section>\n <section class="card">
   <div class="filters">
    <label for="filterStatus"><strong>Filter status:</strong></label>
    <select id="filterStatus"><option value="semua">Semua status</option><option value="menunggu">Menunggu</option><option value="disetujui">Disetujui</option><option value="ditolak">Ditolak</option><option value="dibatalkan">Dibatalkan</option></select>
@@ -147,7 +156,34 @@ document.getElementById("formLaporan").addEventListener("submit",async e=>{
 });
 document.getElementById("laporanOmzet").addEventListener("input",pratinjauLaporan);document.getElementById("laporanBiaya").addEventListener("input",pratinjauLaporan);
 
-async function periksaAdmin(){
+const labelPenerima={msa:"MSA Islamic Bank",pengelola:"Pengelola usaha",operasional:"Operasional",admin:"Admin"};
+function pesanBayar(t,e){const x=document.getElementById("pesanBayarHasil");x.className=t;x.textContent=e;}
+function metodeBayarFields(){const show=document.getElementById("bayarMetode").value==="transfer";document.querySelectorAll(".field-transfer").forEach(x=>x.hidden=!show);["bayarBank","bayarNamaRekening","bayarReferensi"].forEach(id=>document.getElementById(id).required=show);}
+async function muatPilihanBayar(){
+ const s=document.getElementById("bayarLaporan"),{data,error}=await db.from("laporan_keuntungan_musyarakah").select("id,periode_bulan,pengajuan_id,keuntungan_bersih").order("periode_bulan",{ascending:false});
+ if(error){pesanBayar("error",error.message);return;}let names={};const ids=[...new Set((data||[]).map(x=>x.pengajuan_id))];if(ids.length){const q=await db.from("pengajuan_pinjaman").select("id,nama_pemohon").in("id",ids);(q.data||[]).forEach(x=>names[x.id]=x.nama_pemohon);}
+ s.replaceChildren();const first=node("option","Pilih laporan keuntungan");first.value="";s.append(first);(data||[]).forEach(x=>{const o=node("option",new Date(x.periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"})+" • "+(names[x.pengajuan_id]||"Pemohon")+" • "+rupiah(x.keuntungan_bersih));o.value=x.id;s.append(o);});
+ if(s.options.length===1)s.options[0].textContent="Belum ada laporan keuntungan";
+}
+async function muatRekapBayar(){
+ const [lr,pr]=await Promise.all([db.from("laporan_keuntungan_musyarakah").select("id,pengajuan_id,periode_bulan,bagian_msa,bagian_pengelola,bagian_operasional,bagian_admin").order("periode_bulan",{ascending:false}),db.from("pembayaran_bagi_hasil_musyarakah").select("id,laporan_id,penerima,jumlah_dibayar,tanggal_bayar,metode_pembayaran,keterangan,nomor_referensi").order("tanggal_bayar",{ascending:false})]);
+ const rb=document.getElementById("rekapBayarHasil"),hb=document.getElementById("riwayatBayarHasil");rb.replaceChildren();hb.replaceChildren();if(lr.error||pr.error){pesanBayar("error",lr.error?.message||pr.error?.message);return;}
+ const ids=[...new Set((lr.data||[]).map(x=>x.pengajuan_id))];let names={};if(ids.length){const q=await db.from("pengajuan_pinjaman").select("id,nama_pemohon").in("id",ids);(q.data||[]).forEach(x=>names[x.id]=x.nama_pemohon);}
+ const pays=pr.data||[];if(!lr.data?.length){const tr=node("tr"),td=node("td","Belum ada laporan keuntungan.");td.colSpan=6;tr.append(td);rb.append(tr);}
+ (lr.data||[]).forEach(x=>{const period=new Date(x.periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"});[["msa",x.bagian_msa],["pengelola",x.bagian_pengelola],["operasional",x.bagian_operasional],["admin",x.bagian_admin]].forEach(([who,ent])=>{const paid=pays.filter(p=>p.laporan_id===x.id&&p.penerima===who).reduce((a,p)=>a+Number(p.jumlah_dibayar),0),left=Math.max(0,Number(ent)-paid),tr=node("tr");[period+" • "+(names[x.pengajuan_id]||"-"),labelPenerima[who],rupiah(ent),rupiah(paid),rupiah(left),left===0?"Lunas":"Belum lunas"].forEach(v=>tr.append(node("td",v)));rb.append(tr);});});
+ if(!pays.length){const tr=node("tr"),td=node("td","Belum ada pembayaran yang dicatat.");td.colSpan=5;tr.append(td);hb.append(tr);}
+ pays.forEach(p=>{const tr=node("tr");[tanggal(p.tanggal_bayar),labelPenerima[p.penerima],rupiah(p.jumlah_dibayar),p.metode_pembayaran==="tunai"?"Tunai":"Transfer",p.keterangan||(p.nomor_referensi?"Ref: "+p.nomor_referensi:"-")].forEach(v=>tr.append(node("td",v)));hb.append(tr);});
+}
+document.getElementById("formBayarHasil").addEventListener("submit",async e=>{
+ e.preventDefault();const laporan_id=document.getElementById("bayarLaporan").value,penerima=document.getElementById("bayarPenerima").value,jumlah_dibayar=Number(document.getElementById("bayarJumlah").value),metode_pembayaran=document.getElementById("bayarMetode").value;
+ const bank_tujuan=document.getElementById("bayarBank").value.trim(),nama_pemilik_rekening=document.getElementById("bayarNamaRekening").value.trim(),nomor_referensi=document.getElementById("bayarReferensi").value.trim();
+ if(!laporan_id||jumlah_dibayar<=0){pesanBayar("error","Pilih laporan dan masukkan jumlah pembayaran yang benar.");return;}if(metode_pembayaran==="transfer"&&(!bank_tujuan||!nama_pemilik_rekening||!nomor_referensi)){pesanBayar("error","Lengkapi data transfer.");return;}
+ if(!confirm("Catat pembayaran "+rupiah(jumlah_dibayar)+" kepada "+labelPenerima[penerima]+"? Pastikan uang benar-benar sudah dibayarkan."))return;
+ const btn=document.getElementById("simpanBayarHasil");btn.disabled=true;const {error}=await db.from("pembayaran_bagi_hasil_musyarakah").insert({laporan_id,penerima,jumlah_dibayar,metode_pembayaran,bank_tujuan:metode_pembayaran==="transfer"?bank_tujuan:null,nama_pemilik_rekening:metode_pembayaran==="transfer"?nama_pemilik_rekening:null,nomor_referensi:metode_pembayaran==="transfer"?nomor_referensi:null,keterangan:document.getElementById("bayarCatatan").value.trim()||null,dibayar_oleh:adminId});
+ btn.disabled=false;if(error){pesanBayar("error","Pembayaran gagal dicatat: "+error.message);return;}pesanBayar("success","Pembayaran berhasil dicatat.");e.target.reset();metodeBayarFields();await muatRekapBayar();await muatPilihanBayar();
+});
+document.getElementById("bayarMetode").addEventListener("change",metodeBayarFields);
+\nasync function periksaAdmin(){
  const {data,error}=await db.auth.getSession();
  if(error||!data.session){location.replace("admin.html");return;}
  const {data:profil,error:pe}=await db.from("profil_pengguna").select("nama,peran").eq("id",data.session.user.id).single();
@@ -156,7 +192,7 @@ async function periksaAdmin(){
  await muatPengajuan();
  await muatDaftarPencairan();
  await muatPilihanLaporan();
- await muatRiwayatLaporan();
+ await muatRiwayatLaporan();\n await muatPilihanBayar();\n await muatRekapBayar();\n metodeBayarFields();
 }
 async function muatPengajuan(){
  pesan("","Memuat data pengajuan...");
