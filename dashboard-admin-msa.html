@@ -118,12 +118,24 @@ async function muatRiwayatLaporan(){
  if(!data?.length){const tr=node("tr");const td=node("td","Belum ada laporan keuntungan bulanan.");td.colSpan=9;tr.append(td);b.append(tr);return;}
  data.forEach(x=>{const tr=node("tr");const vals=[new Date(x.periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"}),names[x.pengajuan_id]||"-",rupiah(x.omzet),rupiah(x.biaya_usaha),rupiah(x.keuntungan_bersih),rupiah(x.bagian_msa),rupiah(x.bagian_pengelola),rupiah(x.bagian_operasional),rupiah(x.bagian_admin)];vals.forEach(v=>tr.append(node("td",v)));b.append(tr);});
 }
+function normalisasiBulanLaporan(v){
+ const s=String(v||"").trim();
+ let m=s.match(/^(\\d{4})-(\\d{1,2})$/);
+ if(m)return m[1]+"-"+m[2].padStart(2,"0")+"-01";
+ const namaBulan={januari:"01",jan:"01",februari:"02",feb:"02",maret:"03",mar:"03",april:"04",apr:"04",mei:"05",may:"05",juni:"06",jun:"06",juli:"07",jul:"07",agustus:"08",agu:"08",august:"08",sep:"09",september:"09",oktober:"10",okt:"10",october:"10",november:"11",nov:"11",desember:"12",des:"12",december:"12"};
+ const n=s.toLowerCase().replace(/[,]/g," ").replace(/\\s+/g," ").trim();
+ m=n.match(/^([a-z]+)\\s+(\\d{4})$/)||n.match(/^(\\d{4})\\s+([a-z]+)$/);
+ if(!m)return null;
+ const bulan=/^\\d{4}/.test(n)?namaBulan[m[2]]:namaBulan[m[1]];
+ const tahun=/^\\d{4}/.test(n)?m[1]:m[2];
+ return bulan?tahun+"-"+bulan+"-01":null;
+}
 document.getElementById("formLaporan").addEventListener("submit",async e=>{
  e.preventDefault();const pengajuan_id=document.getElementById("laporanPengajuan").value,bulan=document.getElementById("laporanBulan").value,omzet=Number(document.getElementById("laporanOmzet").value),biaya=Number(document.getElementById("laporanBiaya").value);
- if(!pengajuan_id||!bulan||omzet<0||biaya<0){pesanLaporan("error","Lengkapi data dengan benar.");return;}
- if(!confirm("Simpan laporan bulan "+bulan+"? Pastikan omzet dan biaya sudah benar. Satu laporan per pembiayaan per bulan."))return;
+ const periode_bulan=normalisasiBulanLaporan(bulan);\n if(!pengajuan_id||!periode_bulan||omzet<0||biaya<0){pesanLaporan("error","Lengkapi data dengan benar. Periksa pilihan bulan laporan.");return;}
+ if(!confirm("Simpan laporan bulan "+new Date(periode_bulan+"T00:00:00").toLocaleDateString("id-ID",{month:"long",year:"numeric"})+"? Pastikan omzet dan biaya sudah benar. Satu laporan per pembiayaan per bulan."))return;
  const btn=document.getElementById("simpanLaporan");btn.disabled=true;
- const {error}=await db.from("laporan_keuntungan_musyarakah").insert({pengajuan_id,periode_bulan:bulan+"-01",omzet,biaya_usaha:biaya,catatan:document.getElementById("laporanCatatan").value.trim()||null,dicatat_oleh:adminId});
+ const {error}=await db.from("laporan_keuntungan_musyarakah").insert({pengajuan_id,periode_bulan,omzet,biaya_usaha:biaya,catatan:document.getElementById("laporanCatatan").value.trim()||null,dicatat_oleh:adminId});
  btn.disabled=false;if(error){pesanLaporan("error","Gagal menyimpan: "+error.message);return;}
  pesanLaporan("success","Laporan bulanan berhasil disimpan.");e.target.reset();pratinjauLaporan();await muatRiwayatLaporan();
 });
