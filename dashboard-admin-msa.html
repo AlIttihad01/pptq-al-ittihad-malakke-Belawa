@@ -77,7 +77,8 @@ button:disabled{opacity:.55;cursor:wait}.btn{background:#08734b;color:white}.btn
 <label class="field-transfer" hidden>Bank tujuan<input id="bayarBank"></label><label class="field-transfer" hidden>Nama pemilik rekening<input id="bayarNamaRekening"></label><label class="field-transfer" hidden>Nomor referensi transfer<input id="bayarReferensi"></label>
 <label class="full">Keterangan (opsional)<textarea id="bayarCatatan" rows="2"></textarea></label><div class="full"><button class="btn" id="simpanBayarHasil" type="submit">SIMPAN PEMBAYARAN</button></div></form>
 <p id="pesanBayarHasil" role="status" aria-live="polite"></p><h4>Rekap hak dan pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Periode / Pemohon</th><th>Penerima</th><th>Hak</th><th>Sudah dibayar</th><th>Sisa</th><th>Status</th></tr></thead><tbody id="rekapBayarHasil"><tr><td colspan="6">Memuat rekap...</td></tr></tbody></table></div>
-<h4>Riwayat transaksi pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Penerima</th><th>Jumlah</th><th>Metode</th><th>Catatan</th></tr></thead><tbody id="riwayatBayarHasil"><tr><td colspan="5">Memuat riwayat...</td></tr></tbody></table></div></section>\n <section class="card">
+<h4>Riwayat transaksi pembayaran</h4><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Penerima</th><th>Jumlah</th><th>Metode</th><th>Catatan</th></tr></thead><tbody id="riwayatBayarHasil"><tr><td colspan="5">Memuat riwayat...</td></tr></tbody></table></div></section>
+ <section class="card">
   <div class="filters">
    <label for="filterStatus"><strong>Filter status:</strong></label>
    <select id="filterStatus"><option value="semua">Semua status</option><option value="menunggu">Menunggu</option><option value="disetujui">Disetujui</option><option value="ditolak">Ditolak</option><option value="dibatalkan">Dibatalkan</option></select>
