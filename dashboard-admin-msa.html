@@ -141,15 +141,14 @@ async function muatDaftarPencairan(){
  }
 }
 async function catatPencairan(app,sisa,btn){
- const method=prompt("Pilih metode pencairan:\n1 = Tunai\n2 = Transfer","1");
+ if(sisa<=0){alert("Pembiayaan ini sudah dicairkan.");return;}
+ if(Number(sisa)!==Number(app.jumlah_diajukan)){alert("Ada catatan pencairan sebelumnya. Periksa riwayat pencairan sebelum melanjutkan.");return;}
+ const method=prompt("Pilih metode pencairan:\\n1 = Tunai\\n2 = Transfer","1");
  if(method===null)return;
  const normalized=method.trim().toLowerCase();
  const metode=normalized==="1"||normalized==="tunai"?"tunai":normalized==="2"||normalized==="transfer"?"transfer":null;
  if(!metode){alert("Pilihan tidak valid. Masukkan 1 untuk tunai atau 2 untuk transfer.");return;}
- const amountText=prompt("Masukkan jumlah yang benar-benar dicairkan (maksimal "+rupiah(sisa)+"):",String(sisa));
- if(amountText===null)return;
- const amount=Number(amountText);
- if(!Number.isFinite(amount)||amount<=0||amount>sisa){alert("Jumlah pencairan tidak valid atau melebihi sisa yang tersedia.");return;}
+ const amount=Number(app.jumlah_diajukan);
  let bank=null,namaRekening=null,ref=null;
  if(metode==="transfer"){
   bank=prompt("Nama bank tujuan:");if(bank===null)return;
@@ -159,7 +158,7 @@ async function catatPencairan(app,sisa,btn){
  }
  const note=prompt("Keterangan tambahan (opsional):","");
  if(note===null)return;
- if(!confirm("Pastikan dana sebesar "+rupiah(amount)+" sudah benar-benar diserahkan melalui "+(metode==="tunai"?"TUNAI":"TRANSFER")+".\n\nLanjutkan mencatat pencairan?"))return;
+ if(!confirm("Pencairan hanya dapat dilakukan SEKALIGUS. Pastikan seluruh dana sebesar "+rupiah(amount)+" sudah benar-benar diserahkan melalui "+(metode==="tunai"?"TUNAI":"TRANSFER")+".\\n\\nLanjutkan mencatat pencairan penuh?"))return;
  btn.disabled=true;
  const {error}=await db.from("pencairan_pembiayaan").insert({
   pengajuan_id:app.id,metode_pencairan:metode,jumlah_dicairkan:amount,
@@ -168,7 +167,7 @@ async function catatPencairan(app,sisa,btn){
  });
  btn.disabled=false;
  if(error){const m=document.getElementById("pesanPencairan");m.className="error";m.textContent="Pencatatan gagal: "+error.message;return;}
- const m=document.getElementById("pesanPencairan");m.className="success";m.textContent="Pencairan berhasil dicatat.";
+ const m=document.getElementById("pesanPencairan");m.className="success";m.textContent="Pencairan penuh berhasil dicatat.";
  await muatDaftarPencairan();
 }
 function gambarTabel(){
