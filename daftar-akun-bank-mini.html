@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daftar Akun Bank Mini Al-Ittihad</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f1f5f9;color:#1e293b}
+header{background:#075333;color:white;text-align:center;padding:22px 15px}
+main{max-width:520px;margin:28px auto;padding:0 15px}
+.card{background:white;padding:25px;border-radius:14px;box-shadow:0 4px 18px #0001}
+h2{margin-top:0;color:#075333}label{display:block;margin:15px 0 6px;font-weight:600}
+input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}
+button{width:100%;margin-top:22px;padding:13px;background:#08734b;color:white;border:0;border-radius:8px;font-weight:bold;font-size:15px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}.note{background:#f0fdf4;padding:12px;border-radius:8px;font-size:14px}
+#pesan{margin-top:16px;line-height:1.5}.error{color:#b91c1c}.success{color:#166534}
+a{color:#08734b}small{color:#64748b}
+</style>
+</head>
+<body>
+<header>
+<h2 style="color:white;margin:0">BANK MINI AL-ITTIHAD</h2>
+<div>PPTQ Al-Ittihad Malakke Belawa</div>
+</header>
+<main>
+<div class="card">
+<h2>Daftar Akun Masyarakat Umum</h2>
+<p class="note">Pendaftaran akun dapat dilakukan sendiri tanpa persetujuan Admin. Setelah akun aktif, Anda dapat login dan mengajukan pembiayaan. Setiap pengajuan pembiayaan tetap diperiksa dan diputuskan oleh Admin.</p>
+<form id="formDaftar">
+<label for="nama">Nama lengkap</label>
+<input id="nama" type="text" autocomplete="name" maxlength="150" required>
+<label for="hp">Nomor WhatsApp / HP</label>
+<input id="hp" type="tel" autocomplete="tel" maxlength="20" required>
+<label for="email">Email aktif</label>
+<input id="email" type="email" autocomplete="email" required>
+<label for="password">Kata sandi (minimal 8 karakter)</label>
+<input id="password" type="password" autocomplete="new-password" minlength="8" required>
+<label for="konfirmasi">Ulangi kata sandi</label>
+<input id="konfirmasi" type="password" autocomplete="new-password" minlength="8" required>
+<button id="tombol" type="submit">BUAT AKUN</button>
+</form>
+<p id="pesan" role="status" aria-live="polite"></p>
+<p>Sudah punya akun? <a href="login-bank-mini.html">Login Bank Mini</a></p>
+<p><a href="index.html">Kembali ke website pesantren</a></p>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabaseClient = window.supabase.createClient(
+  "https://cpdkqqxvjfbcoucelhmr.supabase.co",
+  "sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2"
+);
+const form = document.getElementById("formDaftar");
+const tombol = document.getElementById("tombol");
+const pesan = document.getElementById("pesan");
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  pesan.textContent = "";
+  pesan.className = "";
+  const nama = document.getElementById("nama").value.trim();
+  const hp = document.getElementById("hp").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const konfirmasi = document.getElementById("konfirmasi").value;
+  if (nama.length < 2) { pesan.textContent = "Nama minimal 2 karakter."; pesan.className="error"; return; }
+  if (password !== konfirmasi) { pesan.textContent = "Konfirmasi kata sandi tidak sama."; pesan.className="error"; return; }
+  tombol.disabled = true;
+  tombol.textContent = "MEMBUAT AKUN...";
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: "https://alittihad01.github.io/pptq-al-ittihad-malakke-Belawa/login-bank-mini.html",
+      data: {
+        nama_pemohon: nama,
+        no_hp_pemohon: hp,
+        kategori_pemohon: "masyarakat_umum",
+        jenis_akun: "bank_mini"
+      }
+    }
+  });
+  tombol.disabled = false;
+  tombol.textContent = "BUAT AKUN";
+  if (error) {
+    pesan.textContent = "Pendaftaran belum berhasil: " + error.message;
+    pesan.className = "error";
+    return;
+  }
+  form.reset();
+  pesan.className = "success";
+  if (data.session) {
+    pesan.textContent = "Akun berhasil dibuat. Silakan masuk melalui halaman Login Bank Mini.";
+    await supabaseClient.auth.signOut();
+  } else {
+    pesan.textContent = "Pendaftaran berhasil. Silakan periksa email untuk konfirmasi akun. Setelah konfirmasi, Anda dapat langsung login tanpa menunggu persetujuan Admin.";
+  }
+});
+</script>
+</body>
+</html>
