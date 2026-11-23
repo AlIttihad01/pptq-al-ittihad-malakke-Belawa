@@ -340,7 +340,7 @@ async function buatLaporanMurabahah(){
  const period=document.getElementById("bulanLaporanMurabahah").value;
  const area=document.getElementById("laporanMurabahahCetak");
  const msg=document.getElementById("pesanLaporanMurabahah");
- if(!/^\\d{4}-\\d{2}$/.test(period)){msg.className="error";msg.textContent="Pilih bulan laporan terlebih dahulu.";return;}
+ if(!/^\d{4}-\d{2}$/.test(period)){msg.className="error";msg.textContent="Pilih bulan laporan terlebih dahulu.";return;}
  msg.className="muted";msg.textContent="Menyiapkan laporan Murabahah...";
  const [finRes,schedRes,payRes]=await Promise.all([
   db.from("pembiayaan_murabahah").select("id,pengajuan_id,nama_barang,nama_pemasok,tanggal_pembelian,harga_perolehan,margin_persen,harga_jual,tenor_bulan,tanggal_serah_terima").order("tanggal_pembelian"),
