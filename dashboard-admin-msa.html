@@ -424,7 +424,7 @@ async function buatLaporanTerpadu(){
  const period=document.getElementById("bulanLaporanTerpadu").value;
  const area=document.getElementById("laporanTerpaduCetak");
  const msg=document.getElementById("pesanLaporanTerpadu");
- if(!/^\\d{4}-\\d{2}$/.test(period)){msg.className="error";msg.textContent="Pilih bulan laporan terlebih dahulu.";return;}
+ if(!/^\d{4}-\d{2}$/.test(period)){msg.className="error";msg.textContent="Pilih bulan laporan terlebih dahulu.";return;}
  msg.className="muted";msg.textContent="Menyiapkan laporan terpadu...";
  const start=period+"-01";
  const [finRes,schedRes,payRes,musyRes]=await Promise.all([
