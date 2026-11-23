@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pengajuan Pembiayaan - Bank Mini Al-Ittihad</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#1e293b}
+header{background:#075333;color:white;padding:20px;text-align:center}main{max-width:700px;margin:25px auto;padding:0 14px}
+.card{background:white;padding:24px;border-radius:14px;box-shadow:0 4px 18px #0001}
+h2{color:#075333;margin-top:0}label{display:block;margin:15px 0 6px;font-weight:600}
+input,select,textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
+textarea{min-height:110px;resize:vertical}.note{background:#f0fdf4;padding:12px;border-radius:8px;font-size:14px;line-height:1.5}
+button{margin-top:20px;padding:13px 18px;background:#08734b;color:white;border:0;border-radius:8px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.6}#pesan{line-height:1.6;white-space:pre-wrap}.success{color:#166534}.error{color:#b91c1c}
+.code{font-size:19px;font-weight:bold;letter-spacing:1px;word-break:break-word}
+a{color:#08734b}
+</style></head><body>
+<header><h2 style="color:white;margin:0">BANK MINI AL-ITTIHAD</h2><div>Formulir Pengajuan Pembiayaan</div></header>
+<main><div class="card">
+<p class="note">Pengajuan akan diperiksa oleh Admin. Pengiriman formulir belum berarti pembiayaan disetujui. Nominal pengajuan saat ini Rp100.000 sampai Rp3.000.000.</p>
+<form id="formPengajuan">
+<label for="kategori">Kategori pemohon</label>
+<select id="kategori" required>
+<option value="masyarakat_umum">Masyarakat umum</option><option value="orang_tua">Orang tua santri</option><option value="pengurus">Pengurus</option><option value="guru">Guru</option>
+</select>
+<label for="nama">Nama lengkap</label><input id="nama" maxlength="150" required>
+<label for="hp">Nomor HP / WhatsApp</label><input id="hp" type="tel" maxlength="20" required>
+<label for="tujuan">Tujuan pembiayaan</label>
+<select id="tujuan" required><option value="pribadi_keluarga">Kebutuhan pribadi/keluarga</option><option value="modal_usaha">Modal usaha</option><option value="pendidikan">Pendidikan</option></select>
+<label for="akad">Akad yang diusulkan</label>
+<select id="akad" required><option value="qardh_hasan">Qardh Hasan</option></select>
+<div id="penjelasanAkad" class="note">Qardh Hasan: pengembalian pokok pinjaman tanpa tambahan yang diwajibkan.</div>
+<label for="jumlah">Jumlah yang diajukan (Rupiah)</label><input id="jumlah" type="number" min="100000" max="3000000" step="1000" placeholder="Contoh: 1000000" required>
+<label for="uraian">Uraian penggunaan dana</label><textarea id="uraian" minlength="10" maxlength="2000" required placeholder="Jelaskan kebutuhan atau rencana usaha secara ringkas (minimal 10 karakter)."></textarea>
+<button id="tombol" type="submit">KIRIM PENGAJUAN</button>
+</form>
+<div id="pesan" role="status" aria-live="polite"></div>
+<p><a href="#" id="keluar">Keluar dari akun</a></p>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabaseClient=window.supabase.createClient("https://cpdkqqxvjfbcoucelhmr.supabase.co","sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2");
+const tujuan=document.getElementById("tujuan"),akad=document.getElementById("akad"),penjelasan=document.getElementById("penjelasanAkad");
+function aturAkad(){
+ if(tujuan.value==="modal_usaha"){
+  akad.innerHTML='<option value="mudharabah">Mudharabah</option><option value="musyarakah">Musyarakah</option>';
+  penjelasan.textContent="Mudharabah: kerja sama pemilik modal dan pengelola usaha dengan nisbah bagi hasil yang disepakati. Musyarakah: kerja sama usaha dengan kontribusi modal para pihak. Rincian nisbah, dasar bagi hasil, dan risiko harus disepakati secara jelas sebelum akad.";
+ }else{
+  akad.innerHTML='<option value="qardh_hasan">Qardh Hasan</option>';
+  penjelasan.textContent="Qardh Hasan: pengembalian pokok pinjaman tanpa tambahan yang diwajibkan.";
+ }
+}
+tujuan.addEventListener("change",aturAkad);
+(async()=>{
+ const {data,error}=await supabaseClient.auth.getSession();
+ if(error||!data.session){window.location.replace("login-bank-mini.html");return;}
+})();
+document.getElementById("formPengajuan").addEventListener("submit",async e=>{
+ e.preventDefault();const tombol=document.getElementById("tombol"),pesan=document.getElementById("pesan");
+ pesan.textContent="";pesan.className="";tombol.disabled=true;tombol.textContent="MENGIRIM...";
+ const body={
+  kategori_pemohon:document.getElementById("kategori").value,
+  nama_pemohon:document.getElementById("nama").value.trim(),
+  no_hp:document.getElementById("hp").value.trim(),
+  tujuan:tujuan.value,
+  uraian_tujuan:document.getElementById("uraian").value.trim(),
+  akad_diusulkan:akad.value,
+  jumlah_diajukan:Number(document.getElementById("jumlah").value)
+ };
+ const {data,error}=await supabaseClient.functions.invoke("ajukan-pembiayaan-publik",{body});
+ tombol.disabled=false;tombol.textContent="KIRIM PENGAJUAN";
+ if(error||data?.error){pesan.className="error";pesan.textContent=data?.error||"Pengajuan belum berhasil dikirim. Pastikan Anda sudah login, lalu coba kembali.";return;}
+ pesan.className="success";
+ pesan.innerHTML="Pengajuan berhasil dikirim dan menunggu pemeriksaan Admin.<br>Kode registrasi Anda:<div class='code'></div><br>Simpan kode ini. Kode hanya ditampilkan sekali.";
+ pesan.querySelector(".code").textContent=data.kode_registrasi;
+ e.target.reset();aturAkad();
+});
+document.getElementById("keluar").addEventListener("click",async e=>{e.preventDefault();await supabaseClient.auth.signOut();window.location.href="login-bank-mini.html";});
+</script></body></html>
