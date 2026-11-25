@@ -84,6 +84,14 @@ KONFIRMASI EMAIL FAHRUNNISA
 <p id="pesanAwaluddin" role="status"></p>
 </div>
 
+
+<div class="card">
+<h3>Konfirmasi Email M. Awaluddin</h3>
+<p>Admin telah memastikan email <strong>awhalpratma@gmail.com</strong> benar milik M. Awaluddin. Gunakan tombol ini untuk konfirmasi dari sisi Admin.</p>
+<button class="setuju" id="btnKonfirmasiAwaluddin" onclick="konfirmasiEmailAwaluddin()">KONFIRMASI EMAIL M. AWALUDDIN</button>
+<p id="pesanKonfirmasiAwaluddin" role="status"></p>
+</div>
+
 <div id="daftar"></div>
 </div>
 
@@ -176,6 +184,31 @@ async function kirimVerifikasiAwaluddin() {
    pesan.textContent = "Permintaan kirim ulang berhasil diproses. Periksa Inbox dan folder Spam email tersebut.";
  } catch(error) {
    pesan.textContent = "Gagal mengirim: " + (error.message || "Kesalahan tidak diketahui.");
+ } finally {
+   tombol.disabled = false;
+ }
+}
+
+
+async function konfirmasiEmailAwaluddin() {
+ if(!await periksaAdmin()) return;
+ const tombol = document.getElementById("btnKonfirmasiAwaluddin");
+ const pesan = document.getElementById("pesanKonfirmasiAwaluddin");
+ if(!confirm("Admin memastikan email awhalpratma@gmail.com benar milik M. Awaluddin. Lanjutkan konfirmasi email akun?")) return;
+ tombol.disabled = true;
+ pesan.textContent = "Memproses konfirmasi email dari sisi Admin...";
+ try {
+   const { data, error } = await db.functions.invoke("admin-confirm-awaluddin-email", { body: {} });
+   if(error) {
+     let detail = error.message || "Permintaan gagal.";
+     try { const info = await error.context?.json(); if(info?.error) detail = info.error; } catch (_) {}
+     throw new Error(detail);
+   }
+   if(!data?.success) throw new Error(data?.error || "Konfirmasi belum berhasil.");
+   pesan.textContent = data.message || "Email berhasil dikonfirmasi.";
+   alert("Email M. Awaluddin berhasil dikonfirmasi. Berikutnya kita periksa status akun.");
+ } catch(error) {
+   pesan.textContent = "Gagal: " + (error.message || "Kesalahan tidak diketahui.");
  } finally {
    tombol.disabled = false;
  }
