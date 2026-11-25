@@ -138,10 +138,10 @@ const { data, error } = await supabaseClient.auth.signUp({
     if (data.user && data.session) {
         await supabaseClient.auth.signOut();
         pesan.textContent =
-            "Pendaftaran berhasil. Silakan periksa email untuk konfirmasi. Setelah itu tunggu persetujuan admin.";
+            "Pendaftaran berhasil. Silakan konfirmasi email Anda. Setelah email terkonfirmasi, Anda dapat langsung login. Data anak akan dihubungkan oleh pihak pondok.";
     } else {
         pesan.textContent =
-            "Pendaftaran berhasil. Silakan periksa email untuk konfirmasi akun. Setelah itu tunggu persetujuan admin.";
+            "Pendaftaran berhasil. Silakan konfirmasi email Anda. Setelah email terkonfirmasi, Anda dapat langsung login. Data anak akan dihubungkan oleh pihak pondok.";
     }
 
     this.reset();
