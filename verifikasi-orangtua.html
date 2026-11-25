@@ -76,6 +76,14 @@ KONFIRMASI EMAIL FAHRUNNISA
 <p id="pesanKonfirmasi" role="status"></p>
 </div>
 
+
+<div class="card">
+<h3>Bantuan Verifikasi M. Awaluddin</h3>
+<p>Email yang digunakan: <strong>awhalpratma@gmail.com</strong>. Admin menyatakan alamat ini benar milik M. Awaluddin. Tombol berikut mengirim ulang email verifikasi resmi dari Supabase; tidak mengubah password atau melewati verifikasi.</p>
+<button class="muat" id="btnKirimVerifikasiAwaluddin" onclick="kirimVerifikasiAwaluddin()">KIRIM ULANG EMAIL VERIFIKASI</button>
+<p id="pesanAwaluddin" role="status"></p>
+</div>
+
 <div id="daftar"></div>
 </div>
 
@@ -143,6 +151,31 @@ async function konfirmasiEmailFahrunnisa() {
    alert("Konfirmasi email berhasil diproses. Berikutnya periksa status di Supabase.");
  } catch (error) {
    pesan.textContent = "Gagal: " + (error.message || "Kesalahan tidak diketahui.");
+ } finally {
+   tombol.disabled = false;
+ }
+}
+
+
+async function kirimVerifikasiAwaluddin() {
+ if(!await periksaAdmin()) return;
+ const tombol = document.getElementById("btnKirimVerifikasiAwaluddin");
+ const pesan = document.getElementById("pesanAwaluddin");
+ if(!confirm("Kirim ulang email verifikasi ke awhalpratma@gmail.com? Pastikan alamat ini benar milik M. Awaluddin.")) return;
+ tombol.disabled = true;
+ pesan.textContent = "Mengirim email verifikasi resmi...";
+ try {
+   const { data, error } = await db.auth.resend({
+     type: "signup",
+     email: "awhalpratma@gmail.com",
+     options: {
+       emailRedirectTo: "https://alittihad01.github.io/pptq-al-ittihad-malakke-Belawa/login-orangtua.html"
+     }
+   });
+   if(error) throw error;
+   pesan.textContent = "Permintaan kirim ulang berhasil diproses. Periksa Inbox dan folder Spam email tersebut.";
+ } catch(error) {
+   pesan.textContent = "Gagal mengirim: " + (error.message || "Kesalahan tidak diketahui.");
  } finally {
    tombol.disabled = false;
  }
