@@ -50,14 +50,14 @@ button {
 <body>
 
 <header>
-<h2>VERIFIKASI PENDAFTARAN ORANG TUA</h2>
+<h2>PENGHUBUNGAN AKUN ORANG TUA DENGAN SANTRI</h2>
 <p>PPTQ AL-ITTIHAD MALAKKE BELAWA</p>
 </header>
 
 <div class="container">
 <div class="card">
-<h3>Daftar Pendaftaran Orang Tua</h3>
-<p>Halaman khusus pengelola/admin pesantren.</p>
+<h3>Akun Orang Tua yang Belum Terhubung dengan Santri</h3>
+<p>Akun orang tua sudah dapat aktif setelah konfirmasi email. Admin hanya menghubungkan akun dengan data santri agar informasi anak tampil di dashboard.</p>
 <button class="muat" onclick="muatPendaftaran()">
 MUAT DATA PENDAFTARAN
 </button>
@@ -235,10 +235,10 @@ async function muatPendaftaran() {
 
  const menunggu = data.filter(x => x.status === "menunggu");
 
- pesan.textContent = "Jumlah pendaftaran menunggu: " + menunggu.length;
+ pesan.textContent = "Jumlah akun yang perlu dihubungkan: " + menunggu.length;
 
  if(menunggu.length === 0) {
-   daftar.innerHTML = "<div class='card'>Belum ada pendaftaran menunggu.</div>";
+   daftar.innerHTML = "<div class='card'>Tidak ada akun yang menunggu penghubungan data santri.</div>";
    return;
  }
 
@@ -274,7 +274,7 @@ async function muatPendaftaran() {
 
    const tombolSetuju = document.createElement("button");
    tombolSetuju.className = "setuju";
-   tombolSetuju.textContent = "SETUJUI";
+   tombolSetuju.textContent = "HUBUNGKAN DENGAN SANTRI";
    tombolSetuju.onclick = () => setujui(p.id,pilih.value);
 
    const tombolTolak = document.createElement("button");
@@ -300,7 +300,7 @@ async function setujui(id,santriId) {
    return;
  }
 
- if(!confirm("Setujui pendaftaran dan hubungkan dengan santri ini?")) return;
+ if(!confirm("Hubungkan akun orang tua ini dengan data santri yang dipilih? Akun orang tua sudah aktif dan tidak memerlukan persetujuan Admin.")) return;
 
  const {error} = await db.rpc(
    "setujui_pendaftaran_orang_tua",
@@ -315,7 +315,7 @@ async function setujui(id,santriId) {
    return;
  }
 
- alert("Pendaftaran berhasil disetujui.");
+ alert("Berhasil! Akun orang tua sudah terhubung dengan data santri.");
  muatPendaftaran();
 }
 
