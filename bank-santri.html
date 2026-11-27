@@ -19,7 +19,7 @@ footer{text-align:center;padding:24px;color:#786b6e;font-size:13px}
 <body>
 <header><h1 style="color:white;margin:0">🏦 BANK SANTRI</h1><p style="margin:7px 0 0">PPTQ AL-ITTIHAD MALAKKE BELAWA</p><p style="margin:4px 0 0;font-size:13px">Layanan Tabungan Santri</p></header>
 <main>
-<div class="card" id="welcome"><h2>Assalamu'alaikum</h2><p>Selamat datang di layanan Bank Santri PPTQ Al-Ittihad. Orang tua dapat melihat nomor rekening, saldo, dan mutasi tabungan santri yang telah terhubung dengan akunnya.</p><p class="muted">Silakan masuk menggunakan akun orang tua yang telah terdaftar.</p><a class="btn" href="login-orangtua.html?next=bank-santri.html">LOGIN ORANG TUA</a> <a class="btn secondary" href="index.html">Kembali ke Website</a></div>
+<div class="card" id="welcome"><h2>Assalamu'alaikum</h2><p>Selamat datang di layanan Bank Santri PPTQ Al-Ittihad. Orang tua, santri, pengurus, dan pembina dapat melihat rekening, saldo, serta mutasi sesuai akses akun masing-masing.</p><p class="muted">Silakan masuk menggunakan akun yang telah didaftarkan dan ditautkan oleh administrator.</p><a class="btn" href="login-orangtua.html?next=bank-santri.html">LOGIN NASABAH</a> <a class="btn secondary" href="index.html">Kembali ke Website</a></div>
 <div id="app" class="hidden"><div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h2 style="margin:0">Rekening Tabungan Keluarga</h2><p id="parentName" class="muted"></p></div><button onclick="keluar()">Keluar</button></div></div>
 <div id="children"></div><p id="message" class="error"></p></div>
 </main><footer>Bank Santri PPTQ Al-Ittihad Malakke · Seluruh transaksi dicatat dalam Rupiah (IDR)</footer>
@@ -31,13 +31,32 @@ const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
 const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function nomorRekening(account){return account?.nomor_rekening||"-";}
+async function tampilkanRekeningPribadi(userId){
+ const {data:accounts,error}=await db.from("bank_rekening").select("id,kelompok,nomor_rekening,nama_pemilik,status").eq("owner_user_id",userId).eq("status","aktif").order("id");
+ if(error){document.getElementById("message").textContent="Rekening belum dapat dimuat: "+error.message;return;}
+ const root=document.getElementById("children");
+ if(!accounts?.length){document.getElementById("message").textContent="Belum ada rekening yang ditautkan ke akun ini. Silakan hubungi administrator.";return;}
+ document.getElementById("parentName").textContent="Buku tabungan nasabah";
+ for(const a of accounts){
+  const {data:rows,error:te}=await db.from("bank_transaksi").select("tanggal,jenis,jumlah,keterangan").eq("rekening_id",a.id).order("tanggal",{ascending:false});
+  if(te){document.getElementById("message").textContent="Mutasi rekening gagal dimuat: "+te.message;continue;}
+  const saldo=(rows||[]).reduce((v,t)=>v+(t.jenis==="setoran"?1:-1)*Number(t.jumlah),0);
+  const setoran=(rows||[]).filter(t=>t.jenis==="setoran").reduce((v,t)=>v+Number(t.jumlah),0);
+  const tarik=(rows||[]).filter(t=>t.jenis==="penarikan").reduce((v,t)=>v+Number(t.jumlah),0);
+  const tr=(rows||[]).map(t=>'<tr><td>'+safe(new Date(t.tanggal).toLocaleDateString("id-ID"))+'</td><td>'+safe(t.jenis==="setoran"?"Setoran":"Penarikan")+'</td><td>'+safe(rupiah(t.jumlah))+'</td><td>'+safe(t.keterangan||"-")+'</td></tr>').join("");
+  const card=document.createElement("section");card.className="card";
+  card.innerHTML='<div class="account"><h3>BUKU REKENING BANK MINI AL-ITTIHAD</h3><div class="muted" style="color:#f5e7ea">NAMA PEMILIK REKENING</div><strong>'+safe(a.nama_pemilik)+'</strong><p style="margin:10px 0 3px;color:#f5e7ea;font-size:13px">NOMOR REKENING</p><div class="number">'+safe(a.nomor_rekening||"-")+'</div><p style="margin:8px 0 0;color:#f5e7ea;font-size:12px">Kelompok: '+safe(a.kelompok)+'</p></div><div class="stats"><div class="stat">Saldo saat ini<strong>'+rupiah(saldo)+'</strong></div><div class="stat">Total setoran<strong>'+rupiah(setoran)+'</strong></div><div class="stat">Total penarikan<strong>'+rupiah(tarik)+'</strong></div></div><h3>Mutasi Rekening</h3><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Jumlah</th><th>Keterangan</th></tr></thead><tbody>'+(tr||'<tr><td colspan="4">Belum ada transaksi.</td></tr>')+'</tbody></table></div><button class="secondary" onclick="window.print()">Cetak Buku Tabungan</button>';
+  root.appendChild(card);
+ }
+}
 async function init(){
  const {data:{session}}=await db.auth.getSession();
  if(!session){document.getElementById("welcome").classList.remove("hidden");return;}
  document.getElementById("welcome").classList.add("hidden");document.getElementById("app").classList.remove("hidden");
  const {data:p,error:pe}=await db.from("orang_tua").select("id,nama_orang_tua").eq("user_id",session.user.id).maybeSingle();
- if(pe||!p){document.getElementById("message").textContent="Profil orang tua belum ditemukan. Silakan hubungi admin pesantren.";return;}
- document.getElementById("parentName").textContent="Akun: "+p.nama_orang_tua;
+ if(pe){document.getElementById("message").textContent="Profil akun belum dapat diperiksa: "+pe.message;return;}
+ if(!p){await tampilkanRekeningPribadi(session.user.id);return;}
+ document.getElementById("parentName").textContent="Akun orang tua: "+p.nama_orang_tua;
  const {data:links,error:le}=await db.from("orang_tua_santri").select("santri_id").eq("orang_tua_id",p.id);
  if(le||!links?.length){document.getElementById("children").innerHTML='<div class="card">Belum ada santri yang terhubung dengan akun ini.</div>';return;}
  const ids=links.map(x=>x.santri_id);
