@@ -38,7 +38,7 @@ async function tampilkanRekeningPribadi(userId){
  if(!accounts?.length){document.getElementById("message").textContent="Belum ada rekening yang ditautkan ke akun ini. Silakan hubungi administrator.";return;}
  document.getElementById("parentName").textContent="Buku tabungan nasabah";
  for(const a of accounts){
-  const {data:rows,error:te}=await db.from("bank_transaksi").select("tanggal,jenis,jumlah,keterangan").eq("rekening_id",a.id).order("tanggal",{ascending:false});
+  let rows=[],offset=0;let te=null;while(true){const {data:batch,error}=await db.from("bank_transaksi").select("tanggal,jenis,jumlah,keterangan").eq("rekening_id",a.id).order("tanggal",{ascending:false}).range(offset,offset+999);if(error){te=error;break;}rows=rows.concat(batch||[]);if(!batch||batch.length<1000)break;offset+=1000;}
   if(te){document.getElementById("message").textContent="Mutasi rekening gagal dimuat: "+te.message;continue;}
   const saldo=(rows||[]).reduce((v,t)=>v+(t.jenis==="setoran"?1:-1)*Number(t.jumlah),0);
   const setoran=(rows||[]).filter(t=>t.jenis==="setoran").reduce((v,t)=>v+Number(t.jumlah),0);
@@ -67,7 +67,7 @@ async function init(){
  if(se||ae){document.getElementById("message").textContent="Data belum dapat dimuat: "+(se?.message||ae?.message);return;}
  const activeAccounts=(accounts||[]).filter(a=>a.status==="aktif");
  const accountIds=activeAccounts.map(a=>a.id);
- const {data:tx,error:te}=accountIds.length?await db.from("bank_transaksi").select("rekening_id,tanggal,jenis,jumlah,keterangan").in("rekening_id",accountIds).order("tanggal",{ascending:false}):{data:[],error:null};
+ let tx=[],offset=0,te=null;if(accountIds.length){while(true){const {data:batch,error}=await db.from("bank_transaksi").select("rekening_id,tanggal,jenis,jumlah,keterangan").in("rekening_id",accountIds).order("tanggal",{ascending:false}).range(offset,offset+999);if(error){te=error;break;}tx=tx.concat(batch||[]);if(!batch||batch.length<1000)break;offset+=1000;}}
  if(te){document.getElementById("message").textContent="Mutasi rekening belum dapat dimuat: "+te.message;return;}
  const root=document.getElementById("children");root.innerHTML="";
  for(const s of students||[]){
