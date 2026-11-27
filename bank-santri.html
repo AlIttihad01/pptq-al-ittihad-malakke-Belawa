@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank Santri | PPTQ Al-Ittihad</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7f4f2;color:#332b2d;font-family:Arial,sans-serif}
+header{background:linear-gradient(135deg,#713b4b,#8b4656);color:white;padding:25px 16px;text-align:center}
+main{max-width:1000px;margin:24px auto;padding:0 14px}.card{background:white;border:1px solid #eadfe1;border-radius:16px;padding:20px;margin:16px 0;box-shadow:0 4px 15px #38202a0c}
+h2,h3{color:#713b4b}.muted{color:#75696c;font-size:14px}.balance{font-size:28px;font-weight:800;color:#713b4b;margin:5px 0}
+.account{background:linear-gradient(135deg,#713b4b,#9b6572);color:white;border-radius:14px;padding:20px;margin:14px 0}
+.account h3{color:white;margin:0 0 10px}.number{font-size:23px;letter-spacing:1px;font-weight:bold}.pill{display:inline-block;background:#f3e5e8;color:#713b4b;border-radius:30px;padding:5px 10px;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.stat{background:#fbf7f7;border-radius:10px;padding:13px}.stat strong{display:block;font-size:18px;margin-top:5px}
+table{width:100%;border-collapse:collapse;min-width:520px}th,td{padding:11px;border-bottom:1px solid #eee;text-align:left;font-size:14px}th{background:#f7edef;color:#713b4b}.table-wrap{overflow-x:auto}
+button,a.btn{border:0;border-radius:8px;padding:11px 15px;background:#713b4b;color:white;text-decoration:none;cursor:pointer;display:inline-block}
+button.secondary,a.secondary{background:#eee4e6;color:#713b4b}.error{color:#b42318}.hidden{display:none}
+footer{text-align:center;padding:24px;color:#786b6e;font-size:13px}
+</style></head>
+<body>
+<header><h1 style="color:white;margin:0">🏦 BANK SANTRI</h1><p style="margin:7px 0 0">PPTQ AL-ITTIHAD MALAKKE BELAWA</p><p style="margin:4px 0 0;font-size:13px">Layanan Tabungan Santri</p></header>
+<main>
+<div class="card" id="welcome"><h2>Assalamu'alaikum</h2><p>Selamat datang di layanan Bank Santri PPTQ Al-Ittihad. Orang tua dapat melihat nomor rekening, saldo, dan mutasi tabungan santri yang telah terhubung dengan akunnya.</p><p class="muted">Silakan masuk menggunakan akun orang tua yang telah terdaftar.</p><a class="btn" href="login-orangtua.html">LOGIN ORANG TUA</a> <a class="btn secondary" href="index.html">Kembali ke Website</a></div>
+<div id="app" class="hidden"><div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h2 style="margin:0">Rekening Tabungan Keluarga</h2><p id="parentName" class="muted"></p></div><button onclick="keluar()">Keluar</button></div></div>
+<div id="children"></div><p id="message" class="error"></p></div>
+</main><footer>Bank Santri PPTQ Al-Ittihad Malakke · Seluruh transaksi dicatat dalam Rupiah (IDR)</footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL="https://cpdkqqxvjfbcoucelhmr.supabase.co";
+const SUPABASE_KEY="sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
+const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function nomorRekening(id){return "001-"+String(id).padStart(6,"0");}
+async function init(){
+ const {data:{session}}=await db.auth.getSession();
+ if(!session){document.getElementById("welcome").classList.remove("hidden");return;}
+ document.getElementById("welcome").classList.add("hidden");document.getElementById("app").classList.remove("hidden");
+ const {data:p,error:pe}=await db.from("orang_tua").select("id,nama_orang_tua").eq("user_id",session.user.id).maybeSingle();
+ if(pe||!p){document.getElementById("message").textContent="Profil orang tua belum ditemukan. Silakan hubungi admin pesantren.";return;}
+ document.getElementById("parentName").textContent="Akun: "+p.nama_orang_tua;
+ const {data:links,error:le}=await db.from("orang_tua_santri").select("santri_id").eq("orang_tua_id",p.id);
+ if(le||!links?.length){document.getElementById("children").innerHTML='<div class="card">Belum ada santri yang terhubung dengan akun ini.</div>';return;}
+ const ids=links.map(x=>x.santri_id);
+ const [{data:students,error:se},{data:tx,error:te}]=await Promise.all([
+  db.from("santri").select("id,nis,nama_lengkap,kelas").in("id",ids),
+  db.from("transaksi_tabungan").select("santri_id,tanggal,jenis,jumlah,keterangan").in("santri_id",ids).order("tanggal",{ascending:false})
+ ]);
+ if(se||te){document.getElementById("message").textContent="Data belum dapat dimuat: "+(se?.message||te?.message);return;}
+ const root=document.getElementById("children");root.innerHTML="";
+ for(const s of students||[]){
+  const rows=(tx||[]).filter(t=>String(t.santri_id)===String(s.id));
+  const saldo=rows.reduce((v,t)=>v+(t.jenis==="setoran"?1:-1)*Number(t.jumlah),0);
+  const setoran=rows.filter(t=>t.jenis==="setoran").reduce((v,t)=>v+Number(t.jumlah),0);
+  const tarik=rows.filter(t=>t.jenis==="penarikan").reduce((v,t)=>v+Number(t.jumlah),0);
+  const tr=rows.map(t=>'<tr><td>'+safe(new Date(t.tanggal).toLocaleDateString("id-ID"))+'</td><td>'+safe(t.jenis==="setoran"?"Setoran":"Penarikan")+'</td><td>'+safe(rupiah(t.jumlah))+'</td><td>'+safe(t.keterangan||"-")+'</td></tr>').join("");
+  const card=document.createElement("section");card.className="card";
+  card.innerHTML='<div class="account"><h3>BUKU REKENING TABUNGAN SANTRI</h3><div class="muted" style="color:#f5e7ea">NAMA PEMILIK REKENING</div><strong>'+safe(s.nama_lengkap)+'</strong><p style="margin:10px 0 3px;color:#f5e7ea;font-size:13px">NOMOR REKENING</p><div class="number">'+nomorRekening(s.id)+'</div><p style="margin:8px 0 0;color:#f5e7ea;font-size:12px">NIS: '+safe(s.nis)+' · Kelas: '+safe(s.kelas||"-")+'</p></div><div class="stats"><div class="stat">Saldo saat ini<strong>'+rupiah(saldo)+'</strong></div><div class="stat">Total setoran<strong>'+rupiah(setoran)+'</strong></div><div class="stat">Total penarikan<strong>'+rupiah(tarik)+'</strong></div></div><h3>Mutasi Rekening</h3><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Jumlah</th><th>Keterangan</th></tr></thead><tbody>'+(tr||'<tr><td colspan="4">Belum ada transaksi.</td></tr>')+'</tbody></table></div><p class="muted">Nomor rekening ditampilkan secara otomatis berdasarkan ID data santri.</p><button class="secondary" onclick="window.print()">Cetak Buku Tabungan</button>';
+  root.appendChild(card);
+ }
+}
+async function keluar(){await db.auth.signOut();location.href="login-orangtua.html";}
+init();
+</script></body></html>
