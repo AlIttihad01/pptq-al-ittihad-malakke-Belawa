@@ -30,7 +30,7 @@ const SUPABASE_KEY="sb_publishable_xWB1iEsnGAZH7RB6yXIWsQ_lr4D0qx2";
 const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
 const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function nomorRekening(id){return "001-"+String(id).padStart(6,"0");}
+function nomorRekening(account){return account?.nomor_rekening||"-";}
 async function init(){
  const {data:{session}}=await db.auth.getSession();
  if(!session){document.getElementById("welcome").classList.remove("hidden");return;}
@@ -41,20 +41,26 @@ async function init(){
  const {data:links,error:le}=await db.from("orang_tua_santri").select("santri_id").eq("orang_tua_id",p.id);
  if(le||!links?.length){document.getElementById("children").innerHTML='<div class="card">Belum ada santri yang terhubung dengan akun ini.</div>';return;}
  const ids=links.map(x=>x.santri_id);
- const [{data:students,error:se},{data:tx,error:te}]=await Promise.all([
+ const [{data:students,error:se},{data:accounts,error:ae}]=await Promise.all([
   db.from("santri").select("id,nis,nama_lengkap,kelas").in("id",ids),
-  db.from("transaksi_tabungan").select("santri_id,tanggal,jenis,jumlah,keterangan").in("santri_id",ids).order("tanggal",{ascending:false})
+  db.from("bank_rekening").select("id,santri_id,nomor_rekening,status").in("santri_id",ids)
  ]);
- if(se||te){document.getElementById("message").textContent="Data belum dapat dimuat: "+(se?.message||te?.message);return;}
+ if(se||ae){document.getElementById("message").textContent="Data belum dapat dimuat: "+(se?.message||ae?.message);return;}
+ const activeAccounts=(accounts||[]).filter(a=>a.status==="aktif");
+ const accountIds=activeAccounts.map(a=>a.id);
+ const {data:tx,error:te}=accountIds.length?await db.from("bank_transaksi").select("rekening_id,tanggal,jenis,jumlah,keterangan").in("rekening_id",accountIds).order("tanggal",{ascending:false}):{data:[],error:null};
+ if(te){document.getElementById("message").textContent="Mutasi rekening belum dapat dimuat: "+te.message;return;}
  const root=document.getElementById("children");root.innerHTML="";
  for(const s of students||[]){
-  const rows=(tx||[]).filter(t=>String(t.santri_id)===String(s.id));
+  const account=activeAccounts.find(a=>String(a.santri_id)===String(s.id));
+  if(!account)continue;
+  const rows=(tx||[]).filter(t=>String(t.rekening_id)===String(account.id));
   const saldo=rows.reduce((v,t)=>v+(t.jenis==="setoran"?1:-1)*Number(t.jumlah),0);
   const setoran=rows.filter(t=>t.jenis==="setoran").reduce((v,t)=>v+Number(t.jumlah),0);
   const tarik=rows.filter(t=>t.jenis==="penarikan").reduce((v,t)=>v+Number(t.jumlah),0);
   const tr=rows.map(t=>'<tr><td>'+safe(new Date(t.tanggal).toLocaleDateString("id-ID"))+'</td><td>'+safe(t.jenis==="setoran"?"Setoran":"Penarikan")+'</td><td>'+safe(rupiah(t.jumlah))+'</td><td>'+safe(t.keterangan||"-")+'</td></tr>').join("");
   const card=document.createElement("section");card.className="card";
-  card.innerHTML='<div class="account"><h3>BUKU REKENING TABUNGAN SANTRI</h3><div class="muted" style="color:#f5e7ea">NAMA PEMILIK REKENING</div><strong>'+safe(s.nama_lengkap)+'</strong><p style="margin:10px 0 3px;color:#f5e7ea;font-size:13px">NOMOR REKENING</p><div class="number">'+nomorRekening(s.id)+'</div><p style="margin:8px 0 0;color:#f5e7ea;font-size:12px">NIS: '+safe(s.nis)+' · Kelas: '+safe(s.kelas||"-")+'</p></div><div class="stats"><div class="stat">Saldo saat ini<strong>'+rupiah(saldo)+'</strong></div><div class="stat">Total setoran<strong>'+rupiah(setoran)+'</strong></div><div class="stat">Total penarikan<strong>'+rupiah(tarik)+'</strong></div></div><h3>Mutasi Rekening</h3><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Jumlah</th><th>Keterangan</th></tr></thead><tbody>'+(tr||'<tr><td colspan="4">Belum ada transaksi.</td></tr>')+'</tbody></table></div><p class="muted">Nomor rekening ditampilkan secara otomatis berdasarkan ID data santri.</p><button class="secondary" onclick="window.print()">Cetak Buku Tabungan</button>';
+  card.innerHTML='<div class="account"><h3>BUKU REKENING TABUNGAN SANTRI</h3><div class="muted" style="color:#f5e7ea">NAMA PEMILIK REKENING</div><strong>'+safe(s.nama_lengkap)+'</strong><p style="margin:10px 0 3px;color:#f5e7ea;font-size:13px">NOMOR REKENING</p><div class="number">'+nomorRekening(account)+'</div><p style="margin:8px 0 0;color:#f5e7ea;font-size:12px">NIS: '+safe(s.nis)+' · Kelas: '+safe(s.kelas||"-")+'</p></div><div class="stats"><div class="stat">Saldo saat ini<strong>'+rupiah(saldo)+'</strong></div><div class="stat">Total setoran<strong>'+rupiah(setoran)+'</strong></div><div class="stat">Total penarikan<strong>'+rupiah(tarik)+'</strong></div></div><h3>Mutasi Rekening</h3><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Jumlah</th><th>Keterangan</th></tr></thead><tbody>'+(tr||'<tr><td colspan="4">Belum ada transaksi.</td></tr>')+'</tbody></table></div><p class="muted">Rekening ini merupakan bagian dari sistem Bank Mini Al-Ittihad.</p><button class="secondary" onclick="window.print()">Cetak Buku Tabungan</button>';
   root.appendChild(card);
  }
 }
