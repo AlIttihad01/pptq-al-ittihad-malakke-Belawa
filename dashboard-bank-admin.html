@@ -16,16 +16,14 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 async function init(){const {data:{session}}=await db.auth.getSession();if(!session){location.href="admin.html";return;}const {data:p,error}=await db.from("profil_pengguna").select("nama,peran").eq("id",session.user.id).single();if(error||p?.peran!=="admin"){await db.auth.signOut();location.href="admin.html";return;}document.getElementById("status").textContent="Login sebagai administrator: "+p.nama;await sinkronSantri();await muat();}
 async function sinkronSantri(){const {data:s,error}=await db.from("santri").select("id,nama_lengkap");if(error)return;for(const x of s||[]){const {data:exists}=await db.from("bank_rekening").select("id").eq("santri_id",x.id).maybeSingle();if(!exists)await db.from("bank_rekening").insert({kelompok:"santri",santri_id:x.id,nama_pemilik:x.nama_lengkap});}}
 document.getElementById("form").addEventListener("submit",async e=>{e.preventDefault();const kelompok=document.getElementById("kelompok").value,nama=document.getElementById("nama").value.trim();const owner_user_id=document.getElementById("ownerUid").value.trim()||null;const {error}=await db.from("bank_rekening").insert({kelompok,nama_pemilik:nama,owner_user_id});document.getElementById("msg").textContent=error?"Gagal membuat rekening: "+error.message:"Rekening berhasil dibuat. Nomor rekening akan tampil pada daftar.";if(!error){e.target.reset();await muat();}});
-async function ambilSemuaTransaksi(selectCols="rekening_id,jenis,jumlah"){let hasil=[],mulai=0,langkah=1000;while(true){const {data,error}=await db.from("bank_transaksi").select(selectCols).order("id").range(mulai,mulai+langkah-1);if(error)throw error;hasil=hasil.concat(data||[]);if(!data||data.length<langkah)break;mulai+=langkah;}return hasil;}
 async function muat(){
  const body=document.getElementById("rows");
- const {data:accounts,error}=await db.from("bank_rekening").select("*").order("id");
- if(error){body.innerHTML='<tr><td colspan="5">Gagal memuat: '+error.message+'</td></tr>';return;}
- let tx=[];try{tx=await ambilSemuaTransaksi();}catch(e){body.innerHTML='<tr><td colspan="5">Gagal memuat transaksi: '+e.message+'</td></tr>';return;}
+ const {data:accounts,error}=await db.rpc("ringkasan_saldo_bank");
+ if(error){body.innerHTML='<tr><td colspan="5">Gagal memuat ringkasan: '+error.message+'</td></tr>';return;}
  const pilihan=document.getElementById("rekening");
  if(pilihan){pilihan.innerHTML='<option value="">-- Pilih rekening --</option>';for(const a of accounts||[]){const nomor=a.nomor_rekening||await assignNumber(a);const op=document.createElement("option");op.value=a.id;op.textContent=nomor+" | "+a.nama_pemilik+" ("+a.kelompok+")";pilihan.appendChild(op);}}
  body.innerHTML="";let totalSaldo=0,jumlahBersaldo=0,jumlahAktif=0;
- for(const a of accounts||[]){const nomor=a.nomor_rekening||await assignNumber(a);const saldo=tx.filter(t=>t.rekening_id===a.id).reduce((v,t)=>v+(t.jenis==="setoran"?1:-1)*Number(t.jumlah),0);totalSaldo+=saldo;if(saldo>0)jumlahBersaldo++;if(a.status==="aktif")jumlahAktif++;const tr=document.createElement("tr");[nomor,a.kelompok,a.nama_pemilik,a.status,fmt(saldo)].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});body.appendChild(tr);}
+ for(const a of accounts||[]){const nomor=a.nomor_rekening||await assignNumber(a);const saldo=Number(a.saldo)||0;totalSaldo+=saldo;if(saldo>0)jumlahBersaldo++;if(a.status==="aktif")jumlahAktif++;const tr=document.createElement("tr");[nomor,a.kelompok,a.nama_pemilik,a.status,fmt(saldo)].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});body.appendChild(tr);}
  if(!accounts?.length)body.innerHTML='<tr><td colspan="5">Belum ada rekening.</td></tr>';
  document.getElementById("jumlahRekening").textContent=jumlahAktif;
  document.getElementById("totalSaldoNasabah").textContent=fmt(totalSaldo);
