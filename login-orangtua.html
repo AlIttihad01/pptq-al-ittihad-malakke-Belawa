@@ -147,7 +147,8 @@ document.getElementById("formLogin")
         return;
     }
 
-    window.location.href = "dashboard-orangtua.html";
+    const tujuan = new URLSearchParams(window.location.search).get("next");
+    window.location.href = tujuan === "bank-santri.html" ? "bank-santri.html" : "dashboard-orangtua.html";
 });
 </script>
 
